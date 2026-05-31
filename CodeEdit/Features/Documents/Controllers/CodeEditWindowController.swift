@@ -49,20 +49,14 @@ final class CodeEditWindowController: NSWindowController, NSToolbarDelegate, Obs
             fatalError("Failed to set up content view.")
         }
 
-        // Previous:
-        // An NSHostingController is used, so the root viewController of the window is a SwiftUI-managed one.
-        // This allows us to use some SwiftUI features, like focusedSceneObject.
-        // -----
-        // let view = CodeEditSplitView(controller: splitViewController).ignoresSafeArea()
-        // contentViewController = NSHostingController(rootView: view)
-        // -----
-        //
-        // New:
-        // The previous decision led to a very jank split controller mechanism because SwiftUI's layout system is not
-        // very compatible with AppKit's when it comes to the inspector/navigator toolbar & split view system.
-        // -----
+        // High roundness and liquid glass window border configurations (macOS 26 concept)
+        splitViewController.view.wantsLayer = true
+        splitViewController.view.layer?.cornerRadius = 20.0
+        splitViewController.view.layer?.masksToBounds = true
+        splitViewController.view.layer?.borderWidth = 1.0
+        splitViewController.view.layer?.borderColor = NSColor(white: 1.0, alpha: 0.12).cgColor
+
         contentViewController = splitViewController
-        // -----
 
         observers = [
             splitViewController.splitViewItems.first!.observe(\.isCollapsed, changeHandler: { [weak self] item, _ in

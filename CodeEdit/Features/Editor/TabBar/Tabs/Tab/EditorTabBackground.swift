@@ -29,11 +29,7 @@ struct EditorTabBackground: View {
         ZStack {
             if isActive {
                 // Content background (visible if active)
-                if #available(macOS 26, *) {
-                    GlassEffectView()
-                } else {
-                    EffectView(.contentBackground)
-                }
+                EffectView(.hudWindow, blendingMode: .withinWindow)
 
                 // Accent color (visible if active)
                 Color(.controlAccentColor)

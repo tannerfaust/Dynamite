@@ -209,7 +209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     // MARK: - Open With CodeEdit (Extension) functions
     private func checkForFilesToOpen() {
         guard let defaults = UserDefaults.init(
-            suiteName: "app.codeedit.CodeEdit.shared"
+            suiteName: "app.codeedit.Dynamite.shared"
         ) else {
             print("Failed to get/init shared defaults")
             return

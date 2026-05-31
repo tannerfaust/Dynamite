@@ -118,7 +118,7 @@ struct EditorAreaView: View {
                         EditorTabBarView(hasTopInsets: topSafeArea > 0, codeFile: fileBinding)
                             .id("TabBarView" + editor.id.uuidString)
                             .environmentObject(editor)
-                        if #unavailable(macOS 26) {
+                        if !Bool.tahoe {
                             Divider()
                         }
                     }
@@ -134,7 +134,7 @@ struct EditorAreaView: View {
                         }
                         .environmentObject(editor)
                         .padding(.top, shouldShowTabBar ? -1 : 0)
-                        if #unavailable(macOS 26) {
+                        if !Bool.tahoe {
                             Divider()
                         }
                     }

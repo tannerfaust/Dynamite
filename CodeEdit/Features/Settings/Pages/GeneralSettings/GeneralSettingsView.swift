@@ -23,7 +23,7 @@ struct GeneralSettingsView: View {
 
     init() {
         guard let defaults = UserDefaults.init(
-            suiteName: "app.codeedit.CodeEdit.shared"
+            suiteName: "app.codeedit.Dynamite.shared"
         ) else {
             print("Failed to get/init shared defaults")
             return
@@ -349,10 +349,10 @@ private extension GeneralSettingsView {
     }
 
     var openInCodeEditToggle: some View {
-        Toggle("Show “Open With CodeEdit” option in Finder", isOn: $openInCodeEdit)
+        Toggle("Show “Open With Dynamite” option in Finder", isOn: $openInCodeEdit)
             .onChange(of: openInCodeEdit) { _, newValue in
                 guard let defaults = UserDefaults.init(
-                    suiteName: "app.codeedit.CodeEdit.shared"
+                    suiteName: "app.codeedit.Dynamite.shared"
                 ) else {
                     print("Failed to get/init shared defaults")
                     return

@@ -43,10 +43,6 @@ extension View {
 
 extension Bool {
      static var tahoe: Bool {
-         if #available(macOS 26, *) {
-             return true
-         } else {
-             return false
-         }
+         return true
      }
  }

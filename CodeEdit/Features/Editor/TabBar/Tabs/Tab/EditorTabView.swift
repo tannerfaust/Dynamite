@@ -123,7 +123,7 @@ struct EditorTabView: View {
     @ViewBuilder var content: some View {
         HStack(spacing: 0.0) {
 
-            if #unavailable(macOS 26) {
+            if !Bool.tahoe {
                 EditorTabDivider()
                     .opacity((isActive || inHoldingState) ? 0.0 : 1.0)
             }
@@ -175,7 +175,7 @@ struct EditorTabView: View {
                 ? 1.0
                 : isActive ? 0.6 : 0.4
             )
-            if #unavailable(macOS 26) {
+            if !Bool.tahoe {
                 EditorTabDivider()
                     .opacity((isActive || inHoldingState) ? 0.0 : 1.0)
             }

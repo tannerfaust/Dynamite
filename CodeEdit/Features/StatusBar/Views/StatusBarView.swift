@@ -45,11 +45,13 @@ struct StatusBarView: View {
         .padding(.horizontal, 10)
         .cursor(.resizeUpDown)
         .frame(height: Self.height)
-        .background(.bar)
+        .background(EffectView(.hudWindow, blendingMode: .withinWindow))
         .padding(.top, 1)
         .overlay(alignment: .top) {
-            Divider()
-                .overlay(Color(nsColor: colorScheme == .dark ? .black : .clear))
+            if !Bool.tahoe {
+                Divider()
+                    .overlay(Color(nsColor: colorScheme == .dark ? .black : .clear))
+            }
         }
         .gesture(dragGesture)
         .disabled(controlActive == .inactive)

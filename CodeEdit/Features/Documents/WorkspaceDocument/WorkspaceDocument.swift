@@ -101,6 +101,11 @@ final class WorkspaceDocument: NSDocument, ObservableObject, NSToolbarDelegate {
             backing: .buffered,
             defer: false
         )
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = true
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
         // Note For anyone hoping to switch back to a Root-SwiftUI window:
         // See Commit 0200c87 for more details and to see what was previously here.
         // -----
