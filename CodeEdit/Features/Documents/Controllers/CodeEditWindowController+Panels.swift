@@ -33,6 +33,21 @@ extension CodeEditWindowController {
         toggleLastPanel(shouldAnimate: true)
     }
 
+    @objc
+    func objcToggleAIChat() {
+        if let navigatorViewModel = navigatorSidebarViewModel,
+           let aiChatTab = navigatorViewModel.tabItems.first(where: { $0 == .aiChat }) {
+            if navigatorCollapsed {
+                toggleFirstPanel(shouldAnimate: true)
+                navigatorViewModel.setNavigatorTab(tab: aiChatTab)
+            } else if navigatorViewModel.selectedTab == .aiChat {
+                toggleFirstPanel(shouldAnimate: true)
+            } else {
+                navigatorViewModel.setNavigatorTab(tab: aiChatTab)
+            }
+        }
+    }
+
     func toggleLastPanel(shouldAnimate: Bool = true) {
         guard let lastSplitView = splitViewController?.splitViewItems.last else {
             return

@@ -123,4 +123,5 @@ extension NSToolbarItem.Identifier {
     static let notificationItem = NSToolbarItem.Identifier("notificationItem")
 
     static let taskSidebarItem: NSToolbarItem.Identifier = NSToolbarItem.Identifier("TaskSidebarItem")
+    static let toggleAIChat: NSToolbarItem.Identifier = NSToolbarItem.Identifier("ToggleAIChat")
 }

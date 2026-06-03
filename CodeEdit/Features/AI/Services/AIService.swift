@@ -24,8 +24,10 @@ class AIService {
         let apiKey = prefs.apiKey
         let model = prefs.model
 
-        guard !apiKey.isEmpty else {
-            throw NSError(domain: "AIService", code: 401, userInfo: [NSLocalizedDescriptionKey: "API Key is missing. Please set your API Key in Settings -> AI Assistant."])
+        if provider != "Mock Test Drive" && provider != "Ollama" {
+            guard !apiKey.isEmpty else {
+                throw NSError(domain: "AIService", code: 401, userInfo: [NSLocalizedDescriptionKey: "API Key is missing. Please set your API Key in Settings -> AI Assistant."])
+            }
         }
 
         // Format the prompt with file context if available
@@ -36,6 +38,10 @@ class AIService {
         formattedPrompt += prompt
 
         switch provider {
+        case "Mock Test Drive":
+            return try await callMockAPI(prompt: prompt, activeFileContent: activeFileContent, activeFilePath: activeFilePath)
+        case "Ollama":
+            return try await callOllamaAPI(model: model, prompt: formattedPrompt)
         case "Claude":
             return try await callClaudeAPI(apiKey: apiKey, model: model, prompt: formattedPrompt)
         case "Gemini":
@@ -45,6 +51,120 @@ class AIService {
         default:
             throw NSError(domain: "AIService", code: 400, userInfo: [NSLocalizedDescriptionKey: "Unknown API Provider: \(provider)"])
         }
+    }
+
+    // MARK: - Mock Test Drive API
+    private func callMockAPI(prompt: String, activeFileContent: String?, activeFilePath: String?) async throws -> String {
+        // Sleep briefly to simulate loading state
+        try await Task.sleep(nanoseconds: 600_000_000)
+
+        let lowerPrompt = prompt.lowercased()
+
+        if let path = activeFilePath {
+            if lowerPrompt.contains("explain") || lowerPrompt.contains("what does") || lowerPrompt.contains("read") {
+                var fileSummary = "I've analyzed the active file: `\(path)`.\n\n"
+                if let content = activeFileContent {
+                    let lines = content.components(separatedBy: .newlines)
+                    fileSummary += "It contains \(lines.count) lines of code. "
+                    
+                    // Identify classes/structs/functions
+                    let structs = lines.filter { $0.contains("struct ") }.compactMap { $0.components(separatedBy: "struct ").last?.components(separatedBy: " ").first?.components(separatedBy: ":").first }
+                    let classes = lines.filter { $0.contains("class ") }.compactMap { $0.components(separatedBy: "class ").last?.components(separatedBy: " ").first?.components(separatedBy: ":").first }
+                    let funcs = lines.filter { $0.contains("func ") }.compactMap { $0.components(separatedBy: "func ").last?.components(separatedBy: " ").first?.components(separatedBy: "(").first }
+                    
+                    if !classes.isEmpty {
+                        fileSummary += "I found classes like: `\(classes.joined(separator: "`, `"))`.\n"
+                    }
+                    if !structs.isEmpty {
+                        fileSummary += "I found structs like: `\(structs.joined(separator: "`, `"))`.\n"
+                    }
+                    if !funcs.isEmpty {
+                        let sampleFuncs = Array(funcs.prefix(5))
+                        fileSummary += "Key methods/functions defined include:\n"
+                        for fn in sampleFuncs {
+                            fileSummary += "- `\(fn.trimmingCharacters(in: .whitespacesAndNewlines))`\n"
+                        }
+                    }
+                }
+                fileSummary += "\nWhat specific parts would you like me to explain or refactor?"
+                return fileSummary
+            }
+        }
+
+        if lowerPrompt.contains("hello") || lowerPrompt.contains("hi") || lowerPrompt.contains("hey") {
+            return "Hello! I am your Dynamite AI assistant. I am currently running in **Mock Test Drive Mode**, which responds offline without needing any API keys. \n\nYou can ask me to explain code, suggest changes, or write mock structures. To use a real model, switch your provider to Google Gemini, Anthropic Claude, or OpenAI in settings."
+        }
+        
+        if lowerPrompt.contains("write") || lowerPrompt.contains("create") || lowerPrompt.contains("code") || lowerPrompt.contains("swift") {
+            return """
+Here is a Swift code example based on your request:
+
+```swift
+import SwiftUI
+
+struct ExampleComponent: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "sparkles")
+                .font(.largeTitle)
+                .foregroundColor(.purple)
+            Text("Hello from Dynamite!")
+                .font(.headline)
+        }
+        .padding()
+        .background(Color.secondary.opacity(0.1))
+        .cornerRadius(12)
+    }
+}
+```
+
+Let me know if you want me to customize this component or explain how it works!
+"""
+        }
+
+        return """
+Thanks for asking! I'm running in **Mock Test Drive** mode. Here is a developer suggestion for your prompt:
+
+- To test with real AI responses, get a free key from Google AI Studio and configure Gemini.
+- Alternatively, run `ollama` locally and select the Ollama provider.
+
+Your query: *"\(prompt)"*
+
+\(activeFilePath != nil ? "Currently viewing: `\(activeFilePath!)`" : "No active file opened.")
+"""
+    }
+
+    // MARK: - Ollama API
+    private func callOllamaAPI(model: String, prompt: String) async throws -> String {
+        let url = URL(string: "http://localhost:11434/api/generate")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let requestBody: [String: Any] = [
+            "model": model,
+            "prompt": prompt,
+            "stream": false
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NSError(domain: "AIService", code: 500, userInfo: [NSLocalizedDescriptionKey: "Invalid server response from local Ollama"])
+        }
+
+        if httpResponse.statusCode != 200 {
+            let errorMsg = String(data: data, encoding: .utf8) ?? "HTTP \(httpResponse.statusCode)"
+            throw NSError(domain: "AIService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Ollama Error: \(errorMsg)"])
+        }
+
+        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let text = json["response"] as? String {
+            return text
+        }
+
+        throw NSError(domain: "AIService", code: 500, userInfo: [NSLocalizedDescriptionKey: "Failed to parse Ollama response JSON"])
     }
 
     // MARK: - Claude API

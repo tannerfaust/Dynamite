@@ -21,14 +21,14 @@ extension SettingsData {
             .map { NSLocalizedString($0, comment: "") }
         }
 
-        /// Selected API provider ("Claude", "Gemini", "OpenAI")
-        var provider: String = "Claude"
+        /// Selected API provider ("Mock Test Drive", "Ollama", "Claude", "Gemini", "OpenAI")
+        var provider: String = "Mock Test Drive"
 
         /// Selected model name
-        var model: String = "claude-3-5-sonnet-20241022"
+        var model: String = "mock-assistant"
 
         /// Secure API Key
-        var apiKey: String = ""
+        var apiKey: String = "free-test-drive"
 
         /// Default initializer
         init() {}
@@ -40,17 +40,17 @@ extension SettingsData {
             self.provider = try container.decodeIfPresent(
                 String.self,
                 forKey: .provider
-            ) ?? "Claude"
+            ) ?? "Mock Test Drive"
 
             self.model = try container.decodeIfPresent(
                 String.self,
                 forKey: .model
-            ) ?? "claude-3-5-sonnet-20241022"
+            ) ?? "mock-assistant"
 
             self.apiKey = try container.decodeIfPresent(
                 String.self,
                 forKey: .apiKey
-            ) ?? ""
+            ) ?? "free-test-drive"
         }
     }
 }
