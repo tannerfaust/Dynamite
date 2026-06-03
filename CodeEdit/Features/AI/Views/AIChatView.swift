@@ -20,6 +20,13 @@ struct AIChatMessage: Identifiable, Equatable {
     }
 }
 
+struct MessageSegment: Identifiable {
+    let id = UUID()
+    let isCode: Bool
+    let language: String?
+    let content: String
+}
+
 struct AIChatView: View {
     @EnvironmentObject var workspace: WorkspaceDocument
 
@@ -117,7 +124,7 @@ struct AIChatView: View {
                                 .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(.primary)
                             
-                            Text("Ask questions about code, request explanations, or generate clean Swift architectures. Runs with zero key configuration using Mock Test Drive.")
+                            Text("Ask questions about code, request explanations, or generate clean Swift architectures. Supports both local Ollama and Google Gemini.")
                                 .font(.system(size: 11))
                                 .multilineTextAlignment(.center)
                                 .foregroundColor(.secondary)
@@ -248,7 +255,7 @@ struct AIChatView: View {
             }
             
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 3) {
-                // User Avatar and Bubble
+                // Name Header
                 HStack {
                     if message.role == .user {
                         Spacer()
@@ -261,43 +268,32 @@ struct AIChatView: View {
                     }
                 }
                 
-                HStack {
-                    if message.role == .user {
-                        Spacer()
-                    }
-                    
+                if message.role == .user {
+                    // User bubble (standard plain style)
                     Text(message.content)
                         .textSelection(.enabled)
-                        .font(.system(size: 12, design: message.role == .user ? .default : .monospaced))
+                        .font(.system(size: 12))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .foregroundColor(bubbleForegroundColor(message.role))
+                        .foregroundColor(.white)
                         .background(
-                            Group {
-                                if message.role == .user {
-                                    // Gorgeous purple-blue gradient bubble
-                                    LinearGradient(
-                                        colors: [.blue, .purple],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                } else {
-                                    // Frosted glass bubble
-                                    Color(NSColor.controlBackgroundColor)
-                                        .opacity(0.65)
-                                }
-                            }
+                            LinearGradient(
+                                colors: [.blue, .purple],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
                         .cornerRadius(12)
-                        .shadow(color: message.role == .user ? .blue.opacity(0.15) : .black.opacity(0.03), radius: 4, y: 2)
+                        .shadow(color: .blue.opacity(0.15), radius: 4, y: 2)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
                                 .stroke(bubbleBorderColor(message.role), lineWidth: 1)
                         )
-                    
-                    if message.role != .user {
-                        Spacer()
-                    }
+                } else {
+                    // Assistant multi-style contents (continuous segments with code blocks)
+                    assistantMessageContent(message.content)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
                 }
             }
             
@@ -312,7 +308,107 @@ struct AIChatView: View {
         .padding(.horizontal, 12)
     }
 
-    // Styling Helpers
+    // Render Assistant continuous segments
+    @ViewBuilder
+    private func assistantMessageContent(_ content: String) -> some View {
+        let segments = parseMessageIntoSegments(content)
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(segments) { segment in
+                if segment.isCode {
+                    codeBlockView(language: segment.language, code: segment.content)
+                } else {
+                    Text(LocalizedStringKey(segment.content))
+                        .textSelection(.enabled)
+                        .font(.system(size: 12))
+                        .foregroundColor(.primary)
+                        .lineSpacing(4)
+                }
+            }
+        }
+    }
+
+    // Custom Styled Code Card View
+    @ViewBuilder
+    private func codeBlockView(language: String?, code: String) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header Bar
+            HStack {
+                Text(language?.uppercased() ?? "CODE")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Button(action: {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(code, forType: .string)
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "doc.on.doc")
+                            .font(.system(size: 9))
+                        Text("Copy")
+                            .font(.system(size: 9, weight: .bold))
+                    }
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.primary.opacity(0.06))
+                    .cornerRadius(4)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.primary.opacity(0.05))
+            
+            Divider()
+            
+            // Code content container
+            ScrollView(.horizontal, showsIndicators: true) {
+                Text(code)
+                    .textSelection(.enabled)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(.primary)
+                    .padding(10)
+            }
+            .background(Color.black.opacity(0.15))
+        }
+        .background(
+            Color(NSColor.controlBackgroundColor)
+                .opacity(0.5)
+        )
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+        .padding(.vertical, 4)
+    }
+
+    // Parse Markdown Code Blocks Helper
+    private func parseMessageIntoSegments(_ text: String) -> [MessageSegment] {
+        var segments: [MessageSegment] = []
+        let parts = text.components(separatedBy: "```")
+        
+        for (index, part) in parts.enumerated() {
+            if index % 2 == 1 {
+                // Code block segment
+                let lines = part.components(separatedBy: .newlines)
+                let language = lines.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let codeContent = lines.dropFirst().joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+                segments.append(MessageSegment(isCode: true, language: language.isEmpty ? nil : language, content: codeContent))
+            } else {
+                // Normal markdown text segment
+                let trimmed = part.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    segments.append(MessageSegment(isCode: false, language: nil, content: part))
+                }
+            }
+        }
+        return segments
+    }
+
+    // Bubble styles fallback helpers
     private func bubbleForegroundColor(_ role: AIChatMessage.MessageRole) -> Color {
         switch role {
         case .user:
@@ -375,7 +471,7 @@ struct AIChatView: View {
     }
 }
 
-// Glowing loader view replacing simple progress view
+// Glowing loader view
 struct GlowingLoader: View {
     @State private var isAnimating = false
     

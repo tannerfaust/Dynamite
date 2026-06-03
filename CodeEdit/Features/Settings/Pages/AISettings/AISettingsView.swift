@@ -33,7 +33,7 @@ struct AISettingsView: View {
                         settings.model = "claude-3-5-sonnet-20241022"
                         settings.apiKey = ""
                     case "Gemini":
-                        settings.model = "gemini-1.5-flash"
+                        settings.model = "gemini-2.5-flash"
                         settings.apiKey = ""
                     case "OpenAI":
                         settings.model = "gpt-4o"
