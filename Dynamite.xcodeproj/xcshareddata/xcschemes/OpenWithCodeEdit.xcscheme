@@ -19,7 +19,7 @@
                BlueprintIdentifier = "2BE487EB28245162003F3F64"
                BuildableName = "OpenWithCodeEdit.appex"
                BlueprintName = "OpenWithCodeEdit"
-               ReferencedContainer = "container:CodeEdit.xcodeproj">
+               ReferencedContainer = "container:Dynamite.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
          <BuildActionEntry
@@ -31,9 +31,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "B658FB2B27DA9E0F00EA4DBD"
-               BuildableName = "CodeEdit.app"
+               BuildableName = "Dynamite.app"
                BlueprintName = "CodeEdit"
-               ReferencedContainer = "container:CodeEdit.xcodeproj">
+               ReferencedContainer = "container:Dynamite.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -62,9 +62,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "B658FB2B27DA9E0F00EA4DBD"
-            BuildableName = "CodeEdit.app"
+            BuildableName = "Dynamite.app"
             BlueprintName = "CodeEdit"
-            ReferencedContainer = "container:CodeEdit.xcodeproj">
+            ReferencedContainer = "container:Dynamite.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -81,9 +81,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "B658FB2B27DA9E0F00EA4DBD"
-            BuildableName = "CodeEdit.app"
+            BuildableName = "Dynamite.app"
             BlueprintName = "CodeEdit"
-            ReferencedContainer = "container:CodeEdit.xcodeproj">
+            ReferencedContainer = "container:Dynamite.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
