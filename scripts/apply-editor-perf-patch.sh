@@ -16,8 +16,9 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TEXTVIEW_PATCH="$REPO_ROOT/patches/codeedittextview-resize-perf.patch"
 SOURCEEDITOR_PATCH="$REPO_ROOT/patches/codeeditsourceeditor-resize-perf.patch"
+SOURCEEDITOR_HIGHLIGHT_PATCH="$REPO_ROOT/patches/codeeditsourceeditor-highlight-startup-perf.patch"
 
-for patch in "$TEXTVIEW_PATCH" "$SOURCEEDITOR_PATCH"; do
+for patch in "$TEXTVIEW_PATCH" "$SOURCEEDITOR_PATCH" "$SOURCEEDITOR_HIGHLIGHT_PATCH"; do
     if [[ ! -f "$patch" ]]; then
         echo "error: patch not found at $patch" >&2
         exit 1
@@ -55,6 +56,19 @@ is_sourceeditor_patched() {
         "$checkout/Sources/CodeEditSourceEditor/Find/PanelView/FindPanelHostingView.swift" 2>/dev/null &&
         grep -q "findPanelHeightConstraint" \
             "$checkout/Sources/CodeEditSourceEditor/Find/FindViewController.swift" 2>/dev/null
+}
+
+is_sourceeditor_highlight_patched() {
+    local checkout="$1"
+    grep -q "textView.documentRange.length <= Constants.maxSyncContentLength" \
+        "$checkout/Sources/CodeEditSourceEditor/TreeSitter/TreeSitterClient.swift" 2>/dev/null &&
+        grep -q "visibleRangeProvider.visibleTextChanged()" \
+            "$checkout/Sources/CodeEditSourceEditor/Highlighting/Highlighter.swift" 2>/dev/null &&
+        grep -q "highlighter?.refreshVisibleRanges()" \
+            "$checkout/Sources/CodeEditSourceEditor/Controller/TextViewController+Lifecycle.swift" 2>/dev/null &&
+        ! grep -q "No storage found for the given provider" \
+            "$checkout/Sources/CodeEditSourceEditor/Highlighting/StyledRangeContainer/StyledRangeContainer.swift" \
+            2>/dev/null
 }
 
 apply_package_patch() {
@@ -107,7 +121,49 @@ apply_package_patch() {
     done
 }
 
+apply_sourceeditor_highlight_patch() {
+    local candidates=()
+
+    while IFS= read -r checkout; do
+        [[ -n "$checkout" ]] && candidates+=("$checkout")
+    done < <(collect_candidates "CodeEditSourceEditor")
+
+    if [[ ${#candidates[@]} -eq 0 ]]; then
+        echo "No CodeEditSourceEditor checkout found. Build the project once, then re-run." >&2
+        exit 1
+    fi
+
+    for checkout in "${candidates[@]}"; do
+        revision="$(git -C "$checkout" rev-parse --short HEAD 2>/dev/null || true)"
+        if [[ "$revision" != "ee0c00a" ]]; then
+            echo "unsupported CodeEditSourceEditor checkout at $checkout (HEAD $revision, expected ee0c00a)." >&2
+            echo "Update the patch before building against this package revision." >&2
+            exit 1
+        fi
+
+        if is_sourceeditor_highlight_patched "$checkout"; then
+            echo "already patched: $checkout"
+            continue
+        fi
+
+        echo "patching: $checkout"
+        chmod -R u+w "$checkout/Sources/CodeEditSourceEditor" 2>/dev/null || true
+        if git -C "$checkout" apply "$SOURCEEDITOR_HIGHLIGHT_PATCH" 2>/dev/null; then
+            echo "  applied"
+        else
+            if [[ "$checkout" != "$REPO_ROOT/.SourcePackages/"* ]]; then
+                echo "warning: skipped stale DerivedData checkout with partial local edits: $checkout" >&2
+                echo "         Reset that package cache or delete that DerivedData folder before using it directly from Xcode." >&2
+                continue
+            fi
+            echo "failed to apply CodeEditSourceEditor highlight-startup patch (version mismatch or partial local edits)." >&2
+            exit 1
+        fi
+    done
+}
+
 apply_package_patch "CodeEditTextView" "d7ac3f1" "$TEXTVIEW_PATCH" "Sources/CodeEditTextView"
 apply_package_patch "CodeEditSourceEditor" "ee0c00a" "$SOURCEEDITOR_PATCH" "Sources/CodeEditSourceEditor"
+apply_sourceeditor_highlight_patch
 
 echo "Done."

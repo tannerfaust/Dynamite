@@ -1,0 +1,81 @@
+diff --git a/Sources/CodeEditSourceEditor/Controller/TextViewController+Lifecycle.swift b/Sources/CodeEditSourceEditor/Controller/TextViewController+Lifecycle.swift
+index bb654a4..d5b70dd 100644
+--- a/Sources/CodeEditSourceEditor/Controller/TextViewController+Lifecycle.swift
++++ b/Sources/CodeEditSourceEditor/Controller/TextViewController+Lifecycle.swift
+@@ -14,10 +14,16 @@ extension TextViewController {
+         // The calculation this causes cannot be done until the view knows it's final position
+         updateTextInsets()
+         minimapView.layout()
++        highlighter?.refreshVisibleRanges()
+     }
+
+     override public func viewDidAppear() {
+         super.viewDidAppear()
++        textView.updateFrameIfNeeded()
++        highlighter?.refreshVisibleRanges()
++        DispatchQueue.main.async { [weak self] in
++            self?.highlighter?.refreshVisibleRanges()
++        }
+         textCoordinators.forEach { $0.val?.controllerDidAppear(controller: self) }
+     }
+
+diff --git a/Sources/CodeEditSourceEditor/Highlighting/HighlightProviding/HighlightProviderState.swift b/Sources/CodeEditSourceEditor/Highlighting/HighlightProviding/HighlightProviderState.swift
+index c4ae800..5252323 100644
+--- a/Sources/CodeEditSourceEditor/Highlighting/HighlightProviding/HighlightProviderState.swift
++++ b/Sources/CodeEditSourceEditor/Highlighting/HighlightProviding/HighlightProviderState.swift
+@@ -91,6 +91,7 @@ class HighlightProviderState {
+         self.visibleRangeProvider = visibleRangeProvider
+
+         highlightProvider.setUp(textView: textView, codeLanguage: language)
++        invalidate()
+     }
+
+     func setLanguage(language: CodeLanguage) {
+diff --git a/Sources/CodeEditSourceEditor/Highlighting/Highlighter.swift b/Sources/CodeEditSourceEditor/Highlighting/Highlighter.swift
+index cefd82b..50a27f6 100644
+--- a/Sources/CodeEditSourceEditor/Highlighting/Highlighter.swift
++++ b/Sources/CodeEditSourceEditor/Highlighting/Highlighter.swift
+@@ -115,6 +115,7 @@ class Highlighter: NSObject {
+                 language: language
+             )
+         }
++        visibleRangeProvider.visibleTextChanged()
+     }
+
+     // MARK: - Public
+@@ -128,6 +129,10 @@ class Highlighter: NSObject {
+         highlightProviders.forEach { $0.invalidate(set) }
+     }
+
++    public func refreshVisibleRanges() {
++        visibleRangeProvider.visibleTextChanged()
++    }
++
+     /// Sets the language and causes a re-highlight of the entire text.
+     /// - Parameter language: The language to update to.
+     public func setLanguage(language: CodeLanguage) {
+diff --git a/Sources/CodeEditSourceEditor/Highlighting/StyledRangeContainer/StyledRangeContainer.swift b/Sources/CodeEditSourceEditor/Highlighting/StyledRangeContainer/StyledRangeContainer.swift
+index c77e2b5..70bb41b 100644
+--- a/Sources/CodeEditSourceEditor/Highlighting/StyledRangeContainer/StyledRangeContainer.swift
++++ b/Sources/CodeEditSourceEditor/Highlighting/StyledRangeContainer/StyledRangeContainer.swift
+@@ -140,7 +140,6 @@ extension StyledRangeContainer: HighlightProviderStateDelegate {
+     func applyHighlightResult(provider: ProviderID, highlights: [HighlightRange], rangeToHighlight: NSRange) {
+         assert(rangeToHighlight != .notFound, "NSNotFound is an invalid highlight range")
+         guard var storage = _storage[provider]?.store else {
+-            assertionFailure("No storage found for the given provider: \(provider)")
+             return
+         }
+         var runs: [RangeStoreRun<StyleElement>] = []
+diff --git a/Sources/CodeEditSourceEditor/TreeSitter/TreeSitterClient.swift b/Sources/CodeEditSourceEditor/TreeSitter/TreeSitterClient.swift
+index 44a0a34..d1da632 100644
+--- a/Sources/CodeEditSourceEditor/TreeSitter/TreeSitterClient.swift
++++ b/Sources/CodeEditSourceEditor/TreeSitter/TreeSitterClient.swift
+@@ -129,7 +129,7 @@ public final class TreeSitterClient: HighlightProviding {
+         }
+
+         executor.cancelAll(below: .all)
+-        if forceSyncOperation {
++        if forceSyncOperation || textView.documentRange.length <= Constants.maxSyncContentLength {
+             executor.execSync(operation)
+         } else {
+             executor.execAsync(priority: .reset, operation: operation, onCancel: {})

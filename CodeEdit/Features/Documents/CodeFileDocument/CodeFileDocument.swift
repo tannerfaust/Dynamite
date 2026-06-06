@@ -125,9 +125,13 @@ final class CodeFileDocument: NSDocument, ObservableObject {
         }
         addWindowController(windowController)
 
-        window.contentView = NSHostingView(rootView: SettingsInjector {
+        let hostingController = NSHostingController(rootView: SettingsInjector {
             WindowCodeFileView(codeFile: self)
         })
+        if #available(macOS 13.0, *) {
+            hostingController.sizingOptions = []
+        }
+        window.contentViewController = hostingController
 
         window.makeKeyAndOrderFront(nil)
 

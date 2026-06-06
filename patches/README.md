@@ -80,6 +80,20 @@ side panes are all present.
 - Keeps the height constraint in sync with find mode changes instead of asking
   SwiftUI to recompute fitting size during every resize pass.
 
+`codeeditsourceeditor-highlight-startup-perf.patch` also targets
+CodeEditSourceEditor (`ee0c00a`):
+
+- Builds the initial Tree-sitter state synchronously for documents under the
+  package's existing synchronous-content threshold.
+- Invalidates visible highlight ranges immediately when providers are installed,
+  so the first editor paint does not wait for a later scroll or frame-change
+  notification before requesting syntax colors.
+- Refreshes visible highlight ranges again as the editor view appears, after
+  AppKit has resolved the scroll view and text view geometry.
+- Ignores stale async highlight results from providers that have already been
+  removed, avoiding debug-build crashes in standalone document windows.
+- Preserves the asynchronous setup path for large files.
+
 ## Durability
 
 The dependency patches are applied to Swift Package checkout sources and are

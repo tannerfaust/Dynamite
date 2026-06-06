@@ -69,12 +69,14 @@ struct CodeFileView: View {
     private var cancellables = Set<AnyCancellable>()
 
     private let isEditable: Bool
+    private let showMinimapOverride: Bool?
 
     init(
         editorInstance: EditorInstance,
         codeFile: CodeFileDocument,
         textViewCoordinators: [TextViewCoordinator] = [],
-        isEditable: Bool = true
+        isEditable: Bool = true,
+        showMinimapOverride: Bool? = nil
     ) {
         self._editorInstance = .init(wrappedValue: editorInstance)
         self._codeFile = .init(wrappedValue: codeFile)
@@ -84,6 +86,7 @@ struct CodeFileView: View {
             + [codeFile.contentCoordinator]
             + [codeFile.languageServerObjects.textCoordinator]
         self.isEditable = isEditable
+        self.showMinimapOverride = showMinimapOverride
 
         if let openOptions = codeFile.openOptions {
             codeFile.openOptions = nil
@@ -111,6 +114,9 @@ struct CodeFileView: View {
     private var edgeInsets
 
     var body: some View {
+        let effectiveWrapLines = codeFile.wrapLines ?? wrapLinesToEditorWidth
+        let effectiveShowMinimap = showMinimapOverride ?? showMinimap
+
         SourceEditor(
             codeFile.content ?? NSTextStorage(),
             language: codeFile.getLanguage(),
@@ -121,7 +127,7 @@ struct CodeFileView: View {
                     font: font,
                     lineHeightMultiple: lineHeightMultiple,
                     letterSpacing: letterSpacing,
-                    wrapLines: wrapLinesToEditorWidth,
+                    wrapLines: effectiveWrapLines,
                     useSystemCursor: useSystemCursor,
                     tabWidth: defaultTabWidth,
                     bracketPairEmphasis: getBracketPairEmphasis()
@@ -138,7 +144,7 @@ struct CodeFileView: View {
                 ),
                 peripherals: .init(
                     showGutter: showGutter,
-                    showMinimap: showMinimap,
+                    showMinimap: effectiveShowMinimap,
                     showReformattingGuide: showReformattingGuide,
                     showFoldingRibbon: showFoldingRibbon,
                     invisibleCharactersConfiguration: invisibleCharactersConfiguration.textViewOption(),
