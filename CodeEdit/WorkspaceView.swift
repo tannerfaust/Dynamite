@@ -120,7 +120,7 @@ struct WorkspaceView: View {
                     }
                 }
             }
-            .background(EffectView(.hudWindow, blendingMode: .behindWindow))
+            .background(EffectView(.contentBackground))
             .background(WorkspaceSheets().environmentObject(sourceControlManager))
             .onDrop(of: [.fileURL], isTargeted: nil) { providers in
                 _ = handleDrop(providers: providers)

@@ -80,11 +80,23 @@ struct TrackableScrollView<Content>: View where Content: View {
                 }
             }
             .onPreferenceChange(ScrollViewOffsetPreferenceKey.self) { value in
-                self.contentOffset = value[0]
-                if self.contentTrailingOffset != nil {
-                    self.contentTrailingOffset = value[1]
+                setIfChanged(&contentOffset, value[0])
+                if contentTrailingOffset != nil {
+                    setIfChanged(&contentTrailingOffset, value[1])
                 }
             }
+        }
+    }
+
+    private func setIfChanged(_ value: inout CGFloat, _ newValue: CGFloat) {
+        if abs(value - newValue) >= 0.5 {
+            value = newValue
+        }
+    }
+
+    private func setIfChanged(_ value: inout CGFloat?, _ newValue: CGFloat) {
+        if value == nil || abs((value ?? 0) - newValue) >= 0.5 {
+            value = newValue
         }
     }
 

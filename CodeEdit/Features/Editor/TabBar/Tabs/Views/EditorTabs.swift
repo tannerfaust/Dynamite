@@ -95,6 +95,8 @@ struct EditorTabs: View {
 
     @State private var scrollTrailingOffset: CGFloat? = 0
 
+    @State private var resizeScrollTask: Task<Void, Never>?
+
     // Disable the rule because this function is implementing the drag gesture and its animations.
     // It is fairly complicated, so ignore the function body length limitation for now.
     // swiftlint:disable function_body_length cyclomatic_complexity
@@ -214,24 +216,34 @@ struct EditorTabs: View {
     }
 
     private func makeTabItemGeometryReader(id: TabID) -> some View {
-        GeometryReader { tabItemGeoReader in
-            Rectangle()
-                .foregroundColor(.clear)
-                .onAppear {
-                    tabWidth[id] = tabItemGeoReader.size.width
-                    tabLocations[id] = tabItemGeoReader
-                        .frame(in: .global)
+        Group {
+            if draggingTabId != nil || onDragTabId != nil {
+                GeometryReader { tabItemGeoReader in
+                    Rectangle()
+                        .foregroundColor(.clear)
+                        .onAppear {
+                            tabWidth[id] = tabItemGeoReader.size.width
+                            tabLocations[id] = tabItemGeoReader
+                                .frame(in: .global)
+                        }
+                        .onChange(
+                            of: tabItemGeoReader.frame(in: .global)
+                        ) { _, tabCGRect in
+                            if tabLocations[id] == tabCGRect {
+                                return
+                            }
+                            tabLocations[id] = tabCGRect
+                        }
+                        .onChange(
+                            of: tabItemGeoReader.size.width
+                        ) { _, newWidth in
+                            if tabWidth[id] == newWidth {
+                                return
+                            }
+                            tabWidth[id] = newWidth
+                        }
                 }
-                .onChange(
-                    of: tabItemGeoReader.frame(in: .global)
-                ) { _, tabCGRect in
-                    tabLocations[id] = tabCGRect
-                }
-                .onChange(
-                    of: tabItemGeoReader.size.width
-                ) { _, newWidth in
-                    tabWidth[id] = newWidth
-                }
+            }
         }
     }
 
@@ -337,8 +349,16 @@ struct EditorTabs: View {
 
                     // When window size changes, re-compute the expected tab width.
                     .onChange(of: geometryProxy.size.width) { _, _ in
-                        withAnimation {
-                            scrollReader.scrollTo(editor.selectedTab?.file.id)
+                        resizeScrollTask?.cancel()
+                        resizeScrollTask = Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(120))
+                            if !Task.isCancelled {
+                                var transaction = Transaction()
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) {
+                                    scrollReader.scrollTo(editor.selectedTab?.file.id)
+                                }
+                            }
                         }
                     }
                     // When user is not hovering anymore, re-compute the expected tab width immediately.

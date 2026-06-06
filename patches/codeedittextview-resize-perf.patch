@@ -1,0 +1,360 @@
+diff --git a/Sources/CodeEditTextView/Extensions/CTTypesetter+SuggestLineBreak.swift b/Sources/CodeEditTextView/Extensions/CTTypesetter+SuggestLineBreak.swift
+index fefe985..d128451 100644
+--- a/Sources/CodeEditTextView/Extensions/CTTypesetter+SuggestLineBreak.swift
++++ b/Sources/CodeEditTextView/Extensions/CTTypesetter+SuggestLineBreak.swift
+@@ -43,6 +43,29 @@ extension CTTypesetter {
+     ///   - startingOffset: Where to start breaking.
+     ///   - constrainingWidth: The available space for the line.
+     /// - Returns: An offset relative to the entire string indicating where to break.
++    /// Returns the number of characters from `offset` that fit in `constrainingWidth`, guaranteeing at least one
++    /// composed character cluster of forward progress.
++    ///
++    /// `CTTypesetterSuggestClusterBreak` returns `0` when not even a single character cluster fits in
++    /// `constrainingWidth` — which happens when the width is non-positive (e.g. a view, such as the minimap, is
++    /// laid out before it has been sized). Returning `0` makes the typesetting loop in `Typesetter` produce a
++    /// zero-length fragment and never advance, spinning a CPU core at 100% forever (an app hang) even on tiny
++    /// files. Forcing at least one cluster guarantees the loop terminates; the line simply isn't visually wrapped
++    /// until a real width is available, at which point it re-typesets correctly.
++    private func clusterBreakEnsuringProgress(
++        string: NSAttributedString,
++        offset: Int,
++        constrainingWidth: CGFloat
++    ) -> Int {
++        let count = CTTypesetterSuggestClusterBreak(self, offset, constrainingWidth)
++        if count > 0 {
++            return count
++        }
++        guard offset < string.length else { return 0 }
++        let clusterRange = (string.string as NSString).rangeOfComposedCharacterSequence(at: offset)
++        return max(1, clusterRange.location + clusterRange.length - offset)
++    }
++
+     private func suggestLineBreakForCharacter(
+         string: NSAttributedString,
+         startingOffset: Int,
+@@ -51,7 +74,11 @@ extension CTTypesetter {
+         var breakIndex: Int
+         // Check if we need to skip to an attachment
+ 
+-        breakIndex = startingOffset + CTTypesetterSuggestClusterBreak(self, startingOffset, constrainingWidth)
++        breakIndex = startingOffset + clusterBreakEnsuringProgress(
++            string: string,
++            offset: startingOffset,
++            constrainingWidth: constrainingWidth
++        )
+         guard breakIndex < string.length else {
+             return breakIndex
+         }
+@@ -75,7 +102,11 @@ extension CTTypesetter {
+         subrange: NSRange,
+         constrainingWidth: CGFloat
+     ) -> Int {
+-        var breakIndex = subrange.location + CTTypesetterSuggestClusterBreak(self, subrange.location, constrainingWidth)
++        var breakIndex = subrange.location + clusterBreakEnsuringProgress(
++            string: string,
++            offset: subrange.location,
++            constrainingWidth: constrainingWidth
++        )
+         let isBreakAtEndOfString = breakIndex >= subrange.max
+ 
+         let isNextCharacterCarriageReturn = checkIfLineBreakOnCRLF(breakIndex, for: string)
+diff --git a/Sources/CodeEditTextView/TextLayoutManager/TextLayoutManager.swift b/Sources/CodeEditTextView/TextLayoutManager/TextLayoutManager.swift
+index 0a8b57f..d06da7a 100644
+--- a/Sources/CodeEditTextView/TextLayoutManager/TextLayoutManager.swift
++++ b/Sources/CodeEditTextView/TextLayoutManager/TextLayoutManager.swift
+@@ -108,12 +108,31 @@ public class TextLayoutManager: NSObject {
+     /// The maximum width available to lay out lines in, used to determine how much space is available for laying out
+     /// lines. Evals to `.greatestFiniteMagnitude` when ``wrapLines`` is `false`.
+     public var maxLineLayoutWidth: CGFloat {
+-        wrapLines ? wrapLinesWidth : .greatestFiniteMagnitude
+-    }
++        guard wrapLines else { return .greatestFiniteMagnitude }
++        let width = wrapLinesWidth
++        // Guard against a non-positive or non-finite wrap width. This happens when a view is asked to lay out
++        // before it has been sized (e.g. the minimap during `viewWillAppear`/window restoration). Wrapping into
++        // a width of `<= 0` sends CoreText's line breaker into a pathological state — it can never fit even one
++        // character cluster, so `layoutLines` spins at 100% CPU and hangs the app, even on a tiny file. Fall back
++        // to "don't wrap" until a real width is available; the next layout pass re-wraps correctly.
++        guard width.isFinite, width > 0 else { return .greatestFiniteMagnitude }
++        return width
++    }
++
++    /// When set, ``wrapLinesWidth`` returns this frozen value instead of querying the live viewport width.
++    ///
++    /// Used to freeze line wrapping for the duration of a live window/pane resize. While resizing, the viewport
++    /// width changes on every frame, which would otherwise force every visible line to be re-typeset each frame
++    /// (the dominant cause of resize stutter). By freezing the width during the resize and performing a single
++    /// re-wrap when it ends, dragging stays smooth. `nil` outside of a live resize.
++    public var frozenWrapWidth: CGFloat?
+ 
+     /// The width of the space available to draw text fragments when wrapping lines.
+     public var wrapLinesWidth: CGFloat {
+-        (delegate?.textViewportSize().width ?? .greatestFiniteMagnitude) - edgeInsets.horizontal
++        if let frozenWrapWidth {
++            return frozenWrapWidth
++        }
++        return (delegate?.textViewportSize().width ?? .greatestFiniteMagnitude) - edgeInsets.horizontal
+     }
+ 
+     // MARK: - Init
+diff --git a/Sources/CodeEditTextView/TextLine/FastID.swift b/Sources/CodeEditTextView/TextLine/FastID.swift
+new file mode 100644
+index 0000000..87502a2
+--- /dev/null
++++ b/Sources/CodeEditTextView/TextLine/FastID.swift
+@@ -0,0 +1,40 @@
++//
++//  FastID.swift
++//  CodeEditTextView
++//
++//  Fast, process-unique identifier generation for layout objects.
++//
++//  Swift's `UUID()` calls `uuid_generate_random`, which draws from the system
++//  CSPRNG (an AES-CTR DRBG in corecrypto). During a live window/pane resize the
++//  layout system re-typesets every visible line on each frame, allocating
++//  thousands of `LineFragment` / `TextLine` instances. Minting a cryptographic
++//  UUID for each one makes the CSPRNG dominate CPU and pegs a core, which shows
++//  up as a few-FPS stutter while resizing or dragging split dividers.
++//
++//  These identifiers only need to be unique within the running process, so we
++//  mint them from a monotonic counter instead. The result is still a `UUID`
++//  (preserving all existing API and `Identifiable`/`Hashable` usage) but costs
++//  a single atomic increment instead of a crypto draw.
++//
++
++import Foundation
++import os
++
++enum FastID {
++    private static let counter = OSAllocatedUnfairLock(initialState: UInt64(0))
++
++    /// Returns a process-unique `UUID` backed by a monotonic counter (no CSPRNG).
++    static func next() -> UUID {
++        let value = counter.withLock { state -> UInt64 in
++            state &+= 1
++            return state
++        }
++        let bytes = withUnsafeBytes(of: value.bigEndian, Array.init)
++        // Fixed prefix ("CEED7E") marks these as CodeEditTextView sequential ids;
++        // the low 8 bytes carry the counter, guaranteeing in-process uniqueness.
++        return UUID(uuid: (
++            0xCE, 0xED, 0x7E, 0x00, 0x00, 0x00, 0x00, 0x00,
++            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]
++        ))
++    }
++}
+diff --git a/Sources/CodeEditTextView/TextLine/LineFragment.swift b/Sources/CodeEditTextView/TextLine/LineFragment.swift
+index 646bf76..0c4c3e2 100644
+--- a/Sources/CodeEditTextView/TextLine/LineFragment.swift
++++ b/Sources/CodeEditTextView/TextLine/LineFragment.swift
+@@ -46,7 +46,7 @@ public final class LineFragment: Identifiable, Equatable {
+         let offset: Int
+     }
+ 
+-    public let id = UUID()
++    public let id = FastID.next()
+     public var documentRange: NSRange = .notFound
+     public var contents: [FragmentContent]
+     public var width: CGFloat
+diff --git a/Sources/CodeEditTextView/TextLine/TextLine.swift b/Sources/CodeEditTextView/TextLine/TextLine.swift
+index b9038a6..8418c77 100644
+--- a/Sources/CodeEditTextView/TextLine/TextLine.swift
++++ b/Sources/CodeEditTextView/TextLine/TextLine.swift
+@@ -10,7 +10,7 @@ import AppKit
+ 
+ /// Represents a displayable line of text.
+ public final class TextLine: Identifiable, Equatable {
+-    public let id: UUID = UUID()
++    public let id: UUID = FastID.next()
+     private var needsLayout: Bool = true
+     var maxWidth: CGFloat?
+     private(set) var typesetter: Typesetter = Typesetter()
+diff --git a/Sources/CodeEditTextView/TextLine/Typesetter/Typesetter.swift b/Sources/CodeEditTextView/TextLine/Typesetter/Typesetter.swift
+index b5edb85..4398007 100644
+--- a/Sources/CodeEditTextView/TextLine/Typesetter/Typesetter.swift
++++ b/Sources/CodeEditTextView/TextLine/Typesetter/Typesetter.swift
+@@ -185,8 +185,16 @@ final public class Typesetter {
+             let typesetData = typesetLine(typesetter: typesetter, range: typesetSubrange)
+ 
+             // The typesetter won't tell us if 0 characters can fit in the constrained space. This checks to
+-            // make sure we can fit something. If not, we pop and continue
+-            if lineBreak == 1 && context.fragmentContext.width + typesetData.width > displayData.maxWidth {
++            // make sure we can fit something. If not, we pop and continue.
++            //
++            // IMPORTANT: only pop-and-retry when the current fragment already has content — popping then frees up
++            // the full line width for the cluster on the next pass. If the fragment is *empty*, popping gains no
++            // width, so a cluster that's wider than `maxWidth` (e.g. when the view isn't sized yet and `maxWidth`
++            // is ~0) would loop forever without ever advancing `currentPosition`. In that case fall through and
++            // place the cluster anyway (accepting overflow) so layout always makes progress and terminates.
++            if lineBreak == 1
++                && context.fragmentContext.width + typesetData.width > displayData.maxWidth
++                && !context.fragmentContext.contents.isEmpty {
+                 context.popCurrentData()
+                 continue
+             }
+diff --git a/Sources/CodeEditTextView/TextView/TextView+Layout.swift b/Sources/CodeEditTextView/TextView/TextView+Layout.swift
+index 2fef2aa..5a524d8 100644
+--- a/Sources/CodeEditTextView/TextView/TextView+Layout.swift
++++ b/Sources/CodeEditTextView/TextView/TextView+Layout.swift
+@@ -9,7 +9,17 @@ import Foundation
+ 
+ extension TextView {
+     override public func layout() {
++        // Self-heal: if a live resize ever ended without `viewDidEndLiveResize`
++        // clearing the frozen wrap width, drop it here so wrapping can't get stuck
++        // at a stale width. The following `layoutLines()` re-wraps at the real width.
++        if !inLiveResize, wrapWidthRelayoutWorkItem == nil, layoutManager.frozenWrapWidth != nil {
++            layoutManager.frozenWrapWidth = nil
++        }
+         super.layout()
++        if wrapLines, layoutManager.frozenWrapWidth != nil {
++            selectionManager.updateSelectionViews(skipTimerReset: true)
++            return
++        }
+         layoutManager.layoutLines()
+         selectionManager.updateSelectionViews(skipTimerReset: true)
+     }
+@@ -77,6 +87,7 @@ extension TextView {
+         let newWidth = layoutManager.estimatedWidth()
+ 
+         var didUpdate = false
++        var shouldInvalidateLayout = false
+ 
+         if newHeight >= availableSize.height && frame.size.height != newHeight {
+             frame.size.height = newHeight
+@@ -84,14 +95,18 @@ extension TextView {
+         }
+ 
+         if wrapLines && frame.size.width != availableSize.width {
++            updateLiveWrapWidthForResize(availableWidth: availableSize.width)
+             frame.size.width = availableSize.width
++            scheduleLiveWrapRelayout()
++            scheduleFinalWrapRelayout()
+             didUpdate = true
+         } else if !wrapLines && frame.size.width != max(newWidth, availableSize.width) {
+             frame.size.width = max(newWidth, availableSize.width)
+             didUpdate = true
++            shouldInvalidateLayout = true
+         }
+ 
+-        if didUpdate {
++        if didUpdate && shouldInvalidateLayout {
+             needsLayout = true
+             needsDisplay = true
+             layoutManager.setNeedsLayout()
+@@ -103,4 +118,66 @@ extension TextView {
+ 
+         return didUpdate
+     }
++
++    /// Keeps wrapped line layout under our control while AppKit is actively resizing this text view.
++    ///
++    /// `viewWillStartLiveResize` only covers full-window live resize. Split-view divider drags and sidebar
++    /// collapse animations still change the text view width repeatedly without that callback. We record the latest
++    /// desired wrap width here, then re-wrap at a bounded cadence instead of on every AppKit layout pass.
++    private func updateLiveWrapWidthForResize(availableWidth: CGFloat) {
++        guard wrapLines else { return }
++        let width = availableWidth - layoutManager.edgeInsets.horizontal
++        guard width.isFinite, width > 0 else { return }
++        layoutManager.frozenWrapWidth = width
++    }
++
++    /// Re-wraps live during resize at a bounded cadence. This preserves visible wrapping feedback without letting
++    /// AppKit trigger an unbounded `layoutLines()` storm for every frame of a window/split-view resize.
++    private func scheduleLiveWrapRelayout() {
++        guard wrapLines, layoutManager.frozenWrapWidth != nil, wrapWidthLiveRelayoutWorkItem == nil else { return }
++
++        let interval: TimeInterval = 1.0 / 30.0
++        let now = ProcessInfo.processInfo.systemUptime
++        let delay = max(0, interval - (now - lastWrapWidthLiveRelayoutTime))
++
++        let workItem = DispatchWorkItem { [weak self] in
++            guard let self else { return }
++            self.wrapWidthLiveRelayoutWorkItem = nil
++            guard self.wrapLines, self.layoutManager.frozenWrapWidth != nil else { return }
++
++            self.lastWrapWidthLiveRelayoutTime = ProcessInfo.processInfo.systemUptime
++            self.needsLayout = true
++            self.needsDisplay = true
++            self.layoutManager.setNeedsLayout()
++            self.layoutManager.layoutLines()
++            self.selectionManager.updateSelectionViews(skipTimerReset: true)
++        }
++
++        wrapWidthLiveRelayoutWorkItem = workItem
++        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
++    }
++
++    /// Re-wraps once after the editor width stops changing.
++    private func scheduleFinalWrapRelayout() {
++        wrapWidthRelayoutWorkItem?.cancel()
++
++        let workItem = DispatchWorkItem { [weak self] in
++            guard let self else { return }
++            self.wrapWidthRelayoutWorkItem = nil
++            self.wrapWidthLiveRelayoutWorkItem?.cancel()
++            self.wrapWidthLiveRelayoutWorkItem = nil
++            guard self.layoutManager.frozenWrapWidth != nil else { return }
++
++            self.layoutManager.frozenWrapWidth = nil
++            self.needsLayout = true
++            self.needsDisplay = true
++            self.layoutManager.setNeedsLayout()
++            self.layoutManager.layoutLines()
++            self.selectionManager.updateSelectionViews(skipTimerReset: true)
++            _ = self.updateFrameIfNeeded()
++        }
++
++        wrapWidthRelayoutWorkItem = workItem
++        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: workItem)
++    }
+ }
+diff --git a/Sources/CodeEditTextView/TextView/TextView+Lifecycle.swift b/Sources/CodeEditTextView/TextView/TextView+Lifecycle.swift
+index 812919d..ddc53de 100644
+--- a/Sources/CodeEditTextView/TextView/TextView+Lifecycle.swift
++++ b/Sources/CodeEditTextView/TextView/TextView+Lifecycle.swift
+@@ -23,8 +23,28 @@ extension TextView {
+         setUpScrollListeners(scrollView: scrollView)
+     }
+ 
++    override public func viewWillStartLiveResize() {
++        super.viewWillStartLiveResize()
++        // Freeze the line-wrapping width for the duration of the live resize. Otherwise the viewport width
++        // changes on every frame and every visible line is re-typeset each frame, pegging a CPU core and
++        // dropping the resize to a few FPS. We re-wrap once in `viewDidEndLiveResize`.
++        if layoutManager.wrapLines {
++            layoutManager.frozenWrapWidth = layoutManager.wrapLinesWidth
++        }
++    }
++
+     override public func viewDidEndLiveResize() {
+         super.viewDidEndLiveResize()
++        wrapWidthLiveRelayoutWorkItem?.cancel()
++        wrapWidthLiveRelayoutWorkItem = nil
++        wrapWidthRelayoutWorkItem?.cancel()
++        wrapWidthRelayoutWorkItem = nil
++        // Unfreeze and perform a single re-wrap pass at the final width.
++        if layoutManager.frozenWrapWidth != nil {
++            layoutManager.frozenWrapWidth = nil
++            layoutManager.setNeedsLayout()
++            layoutManager.layoutLines()
++        }
+         updateFrameIfNeeded()
+     }
+ }
+diff --git a/Sources/CodeEditTextView/TextView/TextView.swift b/Sources/CodeEditTextView/TextView/TextView.swift
+index 14ed391..7965137 100644
+--- a/Sources/CodeEditTextView/TextView/TextView.swift
++++ b/Sources/CodeEditTextView/TextView/TextView.swift
+@@ -271,6 +271,11 @@ open class TextView: NSView, NSTextContent {
+ 
+     var isOptionPressed: Bool = false
+ 
++    /// Deferred final re-wrap after a live window resize or split-view width animation settles.
++    var wrapWidthRelayoutWorkItem: DispatchWorkItem?
++    var wrapWidthLiveRelayoutWorkItem: DispatchWorkItem?
++    var lastWrapWidthLiveRelayoutTime: TimeInterval = 0
++
+     private var fontCharWidth: CGFloat {
+         (" " as NSString).size(withAttributes: [.font: font]).width
+     }

@@ -80,7 +80,7 @@ final class CodeEditSplitViewController: NSSplitViewController {
             }
         }
 
-        let mainContent = NSSplitViewItem(viewController: NSHostingController(rootView: workspaceView))
+        let mainContent = NSSplitViewItem(viewController: makeSplitPaneHostingController(rootView: workspaceView))
         mainContent.titlebarSeparatorStyle = .line
         mainContent.minimumThickness = 200
 
@@ -96,7 +96,7 @@ final class CodeEditSplitViewController: NSSplitViewController {
     }
 
     private func makeNavigator(view: some View) -> NSSplitViewItem {
-        let navigator = NSSplitViewItem(sidebarWithViewController: NSHostingController(rootView: view))
+        let navigator = NSSplitViewItem(sidebarWithViewController: makeSplitPaneHostingController(rootView: view))
         if #unavailable(macOS 26) {
             navigator.titlebarSeparatorStyle = .none
         }
@@ -107,7 +107,7 @@ final class CodeEditSplitViewController: NSSplitViewController {
     }
 
     private func makeInspector(view: some View) -> NSSplitViewItem {
-        let inspector = NSSplitViewItem(inspectorWithViewController: NSHostingController(rootView: view))
+        let inspector = NSSplitViewItem(inspectorWithViewController: makeSplitPaneHostingController(rootView: view))
         inspector.titlebarSeparatorStyle = .none
         inspector.minimumThickness = Self.minSidebarWidth
         inspector.maximumThickness = .greatestFiniteMagnitude
@@ -186,10 +186,12 @@ final class CodeEditSplitViewController: NSSplitViewController {
     ///   - item: The item to collapse or reveal
     ///   - collapseAction: Whether or not to collapse the item. Set to true to collapse it.
     private func hapticCollapse(_ item: NSSplitViewItem?, collapseAction: Bool) {
-        if item?.isCollapsed == !collapseAction {
-            hapticPerformer.perform(.alignment, performanceTime: .now)
+        guard let item, item.isCollapsed != collapseAction else {
+            return
         }
-        item?.isCollapsed = collapseAction
+
+        hapticPerformer.perform(.alignment, performanceTime: .now)
+        item.isCollapsed = collapseAction
     }
 
     /// Save the width of the inspector and navigator between sessions.

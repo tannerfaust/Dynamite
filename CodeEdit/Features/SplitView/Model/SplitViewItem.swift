@@ -8,12 +8,24 @@
 import SwiftUI
 import Combine
 
+func makeSplitPaneHostingController<Content: View>(rootView: Content) -> NSHostingController<Content> {
+    let controller = NSHostingController(rootView: rootView)
+    if #available(macOS 13.0, *) {
+        // Split panes are sized by NSSplitViewItem constraints and holding priorities.
+        // Exporting SwiftUI min/intrinsic/max size constraints makes AppKit remeasure
+        // large hosted subtrees on every resize frame.
+        controller.sizingOptions = []
+    }
+    return controller
+}
+
 class SplitViewItem: ObservableObject {
 
     var id: AnyHashable
     var item: NSSplitViewItem
 
     var collapsed: Binding<Bool>
+    private var requestedCollapsed: Bool
 
     var cancellables: [AnyCancellable] = []
 
@@ -21,8 +33,9 @@ class SplitViewItem: ObservableObject {
 
     init(child: _VariadicView.Children.Element) {
         self.id = child.id
-        self.item = NSSplitViewItem(viewController: NSHostingController(rootView: child))
+        self.item = NSSplitViewItem(viewController: makeSplitPaneHostingController(rootView: child))
         self.collapsed = child[SplitViewItemCollapsedViewTraitKey.self]
+        self.requestedCollapsed = self.collapsed.wrappedValue
         self.item.canCollapse = child[SplitViewItemCanCollapseViewTraitKey.self]
         self.item.isCollapsed = self.collapsed.wrappedValue
         self.item.holdingPriority = child[SplitViewHoldingPriorityTraitKey.self]
@@ -35,6 +48,7 @@ class SplitViewItem: ObservableObject {
     private func createObservers() -> [NSKeyValueObservation] {
         [
             item.observe(\.isCollapsed) { [weak self] item, _ in
+                self?.requestedCollapsed = item.isCollapsed
                 self?.collapsed.wrappedValue = item.isCollapsed
             }
         ]
@@ -44,17 +58,31 @@ class SplitViewItem: ObservableObject {
     /// This will fetch updated binding values and update them if needed.
     /// - Parameter child: the view corresponding to the SplitViewItem.
     func update(child: _VariadicView.Children.Element) {
-        self.item.canCollapse = child[SplitViewItemCanCollapseViewTraitKey.self]
+        item.canCollapse = child[SplitViewItemCanCollapseViewTraitKey.self]
+        item.holdingPriority = child[SplitViewHoldingPriorityTraitKey.self]
+
         let canAnimate = child[SplitViewItemCanAnimateViewTraitKey.self]
-        DispatchQueue.main.async {
-            self.observers = []
-            let collapsed = child[SplitViewItemCollapsedViewTraitKey.self].wrappedValue
-            if canAnimate {
-                self.item.animator().isCollapsed = collapsed
-            } else {
-                self.item.isCollapsed = collapsed
+
+        let collapsed = child[SplitViewItemCollapsedViewTraitKey.self]
+        self.collapsed = collapsed
+
+        let shouldCollapse = collapsed.wrappedValue
+        guard requestedCollapsed != shouldCollapse else {
+            return
+        }
+        requestedCollapsed = shouldCollapse
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.item.isCollapsed != shouldCollapse else {
+                return
             }
-            self.item.holdingPriority = child[SplitViewHoldingPriorityTraitKey.self]
+
+            self.observers.removeAll()
+            if canAnimate {
+                self.item.animator().isCollapsed = shouldCollapse
+            } else {
+                self.item.isCollapsed = shouldCollapse
+            }
             self.observers = self.createObservers()
         }
     }

@@ -99,13 +99,6 @@ struct SettingsView: View {
                 icon: .system("bolt")
             )
         ),
-        .init(
-            SettingsPage(
-                .aiSettings,
-                baseColor: .purple,
-                icon: .system("sparkles")
-            )
-        ),
     ]
 
     @ObservedObject private var settings: Settings = .shared
@@ -209,8 +202,6 @@ struct SettingsView: View {
                     LanguageServersView()
                 case .developer:
                     DeveloperSettingsView()
-                case .aiSettings:
-                    AISettingsView()
                 default:
                     Text("Implementation Needed").frame(alignment: .center)
                 }

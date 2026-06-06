@@ -101,9 +101,9 @@ final class WorkspaceDocument: NSDocument, ObservableObject, NSToolbarDelegate {
             backing: .buffered,
             defer: false
         )
-        window.backgroundColor = .clear
-        window.isOpaque = false
-        window.hasShadow = true
+        // Keep the window OPAQUE (do not set isOpaque=false / clear background):
+        // a non-opaque window disables AppKit's optimized live-resize path. The
+        // transparent titlebar gives the edge-to-edge Tahoe look without that cost.
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         // Note For anyone hoping to switch back to a Root-SwiftUI window:

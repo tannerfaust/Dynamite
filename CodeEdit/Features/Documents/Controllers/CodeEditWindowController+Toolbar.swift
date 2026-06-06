@@ -67,7 +67,6 @@ extension CodeEditWindowController {
             .flexibleSpace,
             .itemListTrackingSeparator,
             .flexibleSpace,
-            .toggleAIChat,
             .toggleLastSidebarItem
         ]
 
@@ -81,7 +80,6 @@ extension CodeEditWindowController {
             .flexibleSpace,
             .itemListTrackingSeparator,
             .toggleLastSidebarItem,
-            .toggleAIChat,
             .branchPicker,
             .activityViewer,
             .notificationItem,
@@ -155,19 +153,6 @@ extension CodeEditWindowController {
             toolbarItem.action = #selector(self.objcToggleLastPanel)
             toolbarItem.image = NSImage(
                 systemSymbolName: "sidebar.trailing",
-                accessibilityDescription: nil
-            )?.withSymbolConfiguration(.init(scale: .large))
-
-            return toolbarItem
-        case .toggleAIChat:
-            let toolbarItem = NSToolbarItem(itemIdentifier: NSToolbarItem.Identifier.toggleAIChat)
-            toolbarItem.paletteLabel = "AI Assistant"
-            toolbarItem.toolTip = "Show or hide the AI Chat Assistant"
-            toolbarItem.isBordered = true
-            toolbarItem.target = self
-            toolbarItem.action = #selector(self.objcToggleAIChat)
-            toolbarItem.image = NSImage(
-                systemSymbolName: "sparkles",
                 accessibilityDescription: nil
             )?.withSymbolConfiguration(.init(scale: .large))
 

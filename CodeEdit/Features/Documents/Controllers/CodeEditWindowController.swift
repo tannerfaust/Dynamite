@@ -49,13 +49,6 @@ final class CodeEditWindowController: NSWindowController, NSToolbarDelegate, Obs
             fatalError("Failed to set up content view.")
         }
 
-        // High roundness and liquid glass window border configurations (macOS 26 concept)
-        splitViewController.view.wantsLayer = true
-        splitViewController.view.layer?.cornerRadius = 20.0
-        splitViewController.view.layer?.masksToBounds = true
-        splitViewController.view.layer?.borderWidth = 1.0
-        splitViewController.view.layer?.borderColor = NSColor(white: 1.0, alpha: 0.12).cgColor
-
         contentViewController = splitViewController
 
         observers = [

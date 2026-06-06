@@ -60,9 +60,6 @@ struct CodeFileView: View {
     @AppSettings(\.textEditing.warningCharacters)
     var warningCharacters
 
-    @Environment(\.colorScheme)
-    private var colorScheme
-
     @EnvironmentObject var undoRegistration: UndoManagerRegistration
 
     @ObservedObject private var themeModel: ThemeModel = .shared
