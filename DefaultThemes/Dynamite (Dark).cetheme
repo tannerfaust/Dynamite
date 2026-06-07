@@ -1,0 +1,126 @@
+{
+  "name": "dynamite.dark",
+  "displayName": "Dynamite (Dark)",
+  "description": "Project Hail Mary Eridian spaceship stark theme.",
+  "author": "CodeEdit",
+  "version": "1.0.0",
+  "license": "MIT",
+  "distributionURL": "https://github.com/CodeEditApp/CodeEdit",
+  "type": "dark",
+  "editor": {
+    "background": {
+      "color": "#050505"
+    },
+    "selection": {
+      "color": "#1F2937"
+    },
+    "insertionPoint": {
+      "color": "#22D3EE"
+    },
+    "lineHighlight": {
+      "color": "#111827"
+    },
+    "invisibles": {
+      "color": "#374151"
+    },
+    "text": {
+      "color": "#FFFFFF"
+    },
+    "comments": {
+      "color": "#6B7280"
+    },
+    "strings": {
+      "color": "#FACC15"
+    },
+    "characters": {
+      "color": "#F87171"
+    },
+    "numbers": {
+      "color": "#F87171"
+    },
+    "keywords": {
+      "color": "#39FF14",
+      "bold": true
+    },
+    "attributes": {
+      "color": "#22D3EE"
+    },
+    "types": {
+      "color": "#00FFCC"
+    },
+    "variables": {
+      "color": "#F43F5E"
+    },
+    "commands": {
+      "color": "#38BDF8"
+    },
+    "values": {
+      "color": "#A78BFA"
+    }
+  },
+  "terminal": {
+    "background": {
+      "color": "#050505"
+    },
+    "selection": {
+      "color": "#1F2937"
+    },
+    "cursor": {
+      "color": "#39FF14"
+    },
+    "text": {
+      "color": "#FFFFFF"
+    },
+    "boldText": {
+      "color": "#FFFFFF"
+    },
+    "black": {
+      "color": "#050505"
+    },
+    "red": {
+      "color": "#F43F5E"
+    },
+    "green": {
+      "color": "#39FF14"
+    },
+    "yellow": {
+      "color": "#FACC15"
+    },
+    "blue": {
+      "color": "#38BDF8"
+    },
+    "magenta": {
+      "color": "#A78BFA"
+    },
+    "cyan": {
+      "color": "#00FFCC"
+    },
+    "white": {
+      "color": "#E5E7EB"
+    },
+    "brightBlack": {
+      "color": "#4B5563"
+    },
+    "brightRed": {
+      "color": "#F43F5E"
+    },
+    "brightGreen": {
+      "color": "#39FF14"
+    },
+    "brightYellow": {
+      "color": "#FDE047"
+    },
+    "brightBlue": {
+      "color": "#60A5FA"
+    },
+    "brightMagenta": {
+      "color": "#C084FC"
+    },
+    "brightCyan": {
+      "color": "#67E8F9"
+    },
+    "brightWhite": {
+      "color": "#FFFFFF"
+    }
+  }
+}

@@ -31,7 +31,7 @@ build_app() {
 }
 
 open_app() {
-  /usr/bin/open -n "$APP_BUNDLE"
+  "$APP_BUNDLE/Contents/MacOS/$APP_NAME" &
 }
 
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true

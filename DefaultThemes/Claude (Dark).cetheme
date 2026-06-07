@@ -1,0 +1,126 @@
+{
+  "name": "claude.dark",
+  "displayName": "Claude (Dark)",
+  "description": "Warm Claude dark theme.",
+  "author": "CodeEdit",
+  "version": "1.0.0",
+  "license": "MIT",
+  "distributionURL": "https://github.com/CodeEditApp/CodeEdit",
+  "type": "dark",
+  "editor": {
+    "background": {
+      "color": "#181816"
+    },
+    "selection": {
+      "color": "#36322C"
+    },
+    "insertionPoint": {
+      "color": "#E67E5A"
+    },
+    "lineHighlight": {
+      "color": "#222220"
+    },
+    "invisibles": {
+      "color": "#534E45"
+    },
+    "text": {
+      "color": "#ECE9E2"
+    },
+    "comments": {
+      "color": "#7B7465"
+    },
+    "strings": {
+      "color": "#A2C5AC"
+    },
+    "characters": {
+      "color": "#D99C6C"
+    },
+    "numbers": {
+      "color": "#D99C6C"
+    },
+    "keywords": {
+      "color": "#E67E5A",
+      "bold": true
+    },
+    "attributes": {
+      "color": "#E69B73"
+    },
+    "types": {
+      "color": "#E5B993"
+    },
+    "variables": {
+      "color": "#9CBEC5"
+    },
+    "commands": {
+      "color": "#99C5D0"
+    },
+    "values": {
+      "color": "#B5A2D9"
+    }
+  },
+  "terminal": {
+    "background": {
+      "color": "#181816"
+    },
+    "selection": {
+      "color": "#36322C"
+    },
+    "cursor": {
+      "color": "#ECE9E2"
+    },
+    "text": {
+      "color": "#ECE9E2"
+    },
+    "boldText": {
+      "color": "#F5F3EF"
+    },
+    "black": {
+      "color": "#181816"
+    },
+    "red": {
+      "color": "#E67E5A"
+    },
+    "green": {
+      "color": "#A2C5AC"
+    },
+    "yellow": {
+      "color": "#D99C6C"
+    },
+    "blue": {
+      "color": "#9CBEC5"
+    },
+    "magenta": {
+      "color": "#B5A2D9"
+    },
+    "cyan": {
+      "color": "#99C5D0"
+    },
+    "white": {
+      "color": "#7B7465"
+    },
+    "brightBlack": {
+      "color": "#534E45"
+    },
+    "brightRed": {
+      "color": "#F08D6C"
+    },
+    "brightGreen": {
+      "color": "#B2D3BC"
+    },
+    "brightYellow": {
+      "color": "#E5B993"
+    },
+    "brightBlue": {
+      "color": "#ACD1D9"
+    },
+    "brightMagenta": {
+      "color": "#C3B2E6"
+    },
+    "brightCyan": {
+      "color": "#A9D9E5"
+    },
+    "brightWhite": {
+      "color": "#ECE9E2"
+    }
+  }
+}

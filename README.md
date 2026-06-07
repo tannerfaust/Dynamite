@@ -30,6 +30,9 @@ CodeEdit is a code editor built by the community, for the community, written ent
 > [!IMPORTANT]
 > CodeEdit is currently in development and not yet recommended for production use, however you can take part in shaping it's future by test-driving [pre-release versions](https://github.com/CodeEditApp/CodeEdit/releases) and [submitting an issue](https://github.com/CodeEditApp/CodeEdit/issues) to let us know what you think.
 
+> [!WARNING]
+> The custom color themes (Claude, Cursor, and default Dynamite) implemented in this build did not work out and need to be heavily improved. Contributions to improve their aesthetic and layout styling are highly welcome.
+
 ## Table of Contents
 
 - [Motivation](#motivation)

@@ -246,6 +246,8 @@ struct SettingsView: View {
         .onDisappear {
             model.removeKeyDownMonitor()
         }
+        .tint(settings.preferences.general.appAccent.color)
+        .accentColor(settings.preferences.general.appAccent.color)
     }
 }
 

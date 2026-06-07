@@ -142,9 +142,6 @@ final class ThemeModel: ObservableObject {
         return selectedTheme == theme
     }
 
-    /// Activates the current theme, setting ``selectedTheme`` and ``selectedLightTheme``/``selectedDarkTheme`` as
-    /// necessary.
-    /// - Parameter theme: The theme to activate.
     func activateTheme(_ theme: Theme) {
         selectedTheme = theme
         if colorScheme == .light {
@@ -152,6 +149,27 @@ final class ThemeModel: ObservableObject {
         }
         if colorScheme == .dark {
             selectedDarkTheme = theme
+        }
+    }
+
+    func updateThemeForAccent(_ accent: SettingsData.AppAccentTheme) {
+        let suffix = colorScheme == .dark ? "dark" : "light"
+        let targetThemeName = switch accent {
+        case .claude: "claude.\(suffix)"
+        case .cursor: "cursor.\(suffix)"
+        case .defaultDynamite: "dynamite.\(suffix)"
+        }
+
+        if let theme = themes.first(where: { $0.name == targetThemeName }) {
+            activateTheme(theme)
+        }
+
+        // Also update the fallback light/dark selections for auto-switching
+        if let darkTheme = themes.first(where: { $0.name == (accent == .claude ? "claude.dark" : accent == .cursor ? "cursor.dark" : "dynamite.dark") }) {
+            selectedDarkTheme = darkTheme
+        }
+        if let lightTheme = themes.first(where: { $0.name == (accent == .claude ? "claude.light" : accent == .cursor ? "cursor.light" : "dynamite.light") }) {
+            selectedLightTheme = lightTheme
         }
     }
 

@@ -58,6 +58,7 @@ final class Editor: ObservableObject, Identifiable {
     @Published var temporaryTab: Tab?
 
     var id = UUID()
+    var shouldFocusEditor: Bool = true
 
     weak var parent: SplitViewData?
     weak var workspace: WorkspaceDocument?

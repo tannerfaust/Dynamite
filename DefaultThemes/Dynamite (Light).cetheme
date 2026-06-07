@@ -1,0 +1,126 @@
+{
+  "name": "dynamite.light",
+  "displayName": "Dynamite (Light)",
+  "description": "Project Hail Mary light theme.",
+  "author": "CodeEdit",
+  "version": "1.0.0",
+  "license": "MIT",
+  "distributionURL": "https://github.com/CodeEditApp/CodeEdit",
+  "type": "light",
+  "editor": {
+    "background": {
+      "color": "#F0FAF5"
+    },
+    "selection": {
+      "color": "#C4F5E2"
+    },
+    "insertionPoint": {
+      "color": "#059669"
+    },
+    "lineHighlight": {
+      "color": "#E1F5EC"
+    },
+    "invisibles": {
+      "color": "#64748B"
+    },
+    "text": {
+      "color": "#042F1A"
+    },
+    "comments": {
+      "color": "#6B7280"
+    },
+    "strings": {
+      "color": "#B45309"
+    },
+    "characters": {
+      "color": "#D97706"
+    },
+    "numbers": {
+      "color": "#D97706"
+    },
+    "keywords": {
+      "color": "#059669",
+      "bold": true
+    },
+    "attributes": {
+      "color": "#0D9488"
+    },
+    "types": {
+      "color": "#0369A1"
+    },
+    "variables": {
+      "color": "#0F52BA"
+    },
+    "commands": {
+      "color": "#0E7490"
+    },
+    "values": {
+      "color": "#6D28D9"
+    }
+  },
+  "terminal": {
+    "background": {
+      "color": "#F0FAF5"
+    },
+    "selection": {
+      "color": "#C4F5E2"
+    },
+    "cursor": {
+      "color": "#042F1A"
+    },
+    "text": {
+      "color": "#042F1A"
+    },
+    "boldText": {
+      "color": "#022C22"
+    },
+    "black": {
+      "color": "#042F1A"
+    },
+    "red": {
+      "color": "#DC2626"
+    },
+    "green": {
+      "color": "#059669"
+    },
+    "yellow": {
+      "color": "#D97706"
+    },
+    "blue": {
+      "color": "#0F52BA"
+    },
+    "magenta": {
+      "color": "#6D28D9"
+    },
+    "cyan": {
+      "color": "#0E7490"
+    },
+    "white": {
+      "color": "#6B7280"
+    },
+    "brightBlack": {
+      "color": "#4B5563"
+    },
+    "brightRed": {
+      "color": "#EF4444"
+    },
+    "brightGreen": {
+      "color": "#10B981"
+    },
+    "brightYellow": {
+      "color": "#F59E0B"
+    },
+    "brightBlue": {
+      "color": "#3B82F6"
+    },
+    "brightMagenta": {
+      "color": "#8B5CF6"
+    },
+    "brightCyan": {
+      "color": "#06B6D4"
+    },
+    "brightWhite": {
+      "color": "#022C22"
+    }
+  }
+}
