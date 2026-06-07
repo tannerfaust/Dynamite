@@ -93,6 +93,11 @@ CodeEditSourceEditor (`ee0c00a`):
 - Ignores stale async highlight results from providers that have already been
   removed, avoiding debug-build crashes in standalone document windows.
 - Preserves the asynchronous setup path for large files.
+- Maps additional Tree-sitter capture names used by modern grammars (for example
+  `function.call`, `operator`, `constant.builtin`) so standalone markdown and
+  code windows get complete syntax coloring instead of unstyled tokens.
+- Routes functions and methods to the theme's command color and booleans or
+  builtins to the value color, matching the main workspace editor appearance.
 
 ## Durability
 

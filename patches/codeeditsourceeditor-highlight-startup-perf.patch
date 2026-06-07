@@ -19,6 +19,56 @@ index bb654a4..d5b70dd 100644
          textCoordinators.forEach { $0.val?.controllerDidAppear(controller: self) }
      }
 
+diff --git a/Sources/CodeEditSourceEditor/Enums/CaptureName.swift b/Sources/CodeEditSourceEditor/Enums/CaptureName.swift
+index 32b37aa..e8b643f 100644
+--- a/Sources/CodeEditSourceEditor/Enums/CaptureName.swift
++++ b/Sources/CodeEditSourceEditor/Enums/CaptureName.swift
+@@ -54,7 +54,7 @@ public enum CaptureName: Int8, CaseIterable, Sendable {
+             return .include
+         case "constructor":
+             return .constructor
+-        case "keyword":
++        case "keyword", "operator", "keyword.operator", "type.qualifier", "label", "punctuation.special":
+             return .keyword
+         case "boolean":
+             return .boolean
+@@ -66,27 +66,27 @@ public enum CaptureName: Int8, CaseIterable, Sendable {
+             return .tag
+         case "comment":
+             return .comment
+-        case "variable":
++        case "variable", "constant":
+             return .variable
+-        case "property":
++        case "property", "property.definition", "variable.member":
+             return .property
+-        case "function":
++        case "function", "function.call", "function.builtin", "function.macro", "function.macro.builtin":
+             return .function
+-        case "method":
++        case "method", "method.call":
+             return .method
+         case "number":
+             return .number
+         case "float":
+             return .float
+-        case "string":
++        case "string", "string.regex", "string.special", "string.escape":
+             return .string
+-        case "type":
++        case "type", "type.builtin":
+             return .type
+-        case "parameter":
++        case "parameter", "variable.parameter":
+             return .parameter
+-        case "type_alternate":
++        case "type_alternate", "type.definition":
+             return .typeAlternate
+-        case "variable.builtin":
++        case "variable.builtin", "constant.builtin":
+             return .variableBuiltin
+         case "keyword.return":
+             return .keywordReturn
 diff --git a/Sources/CodeEditSourceEditor/Highlighting/HighlightProviding/HighlightProviderState.swift b/Sources/CodeEditSourceEditor/Highlighting/HighlightProviding/HighlightProviderState.swift
 index c4ae800..5252323 100644
 --- a/Sources/CodeEditSourceEditor/Highlighting/HighlightProviding/HighlightProviderState.swift
@@ -66,6 +116,27 @@ index c77e2b5..70bb41b 100644
              return
          }
          var runs: [RangeStoreRun<StyleElement>] = []
+diff --git a/Sources/CodeEditSourceEditor/Theme/EditorTheme.swift b/Sources/CodeEditSourceEditor/Theme/EditorTheme.swift
+index c44cfc9..ee6c667 100644
+--- a/Sources/CodeEditSourceEditor/Theme/EditorTheme.swift
++++ b/Sources/CodeEditSourceEditor/Theme/EditorTheme.swift
+@@ -83,12 +83,13 @@ public struct EditorTheme: Equatable {
+     /// - Returns: Theme attributes for the capture.
+     private func mapCapture(_ capture: CaptureName?) -> Attribute {
+         switch capture {
+-        case .include, .constructor, .keyword, .boolean, .variableBuiltin,
+-                .keywordReturn, .keywordFunction, .repeat, .conditional, .tag:
++        case .include, .constructor, .keyword, .keywordReturn, .keywordFunction, .repeat, .conditional, .tag:
+             return keywords
++        case .boolean, .variableBuiltin:
++            return values
+         case .comment: return comments
+         case .variable, .property: return variables
+-        case .function, .method: return variables
++        case .function, .method: return commands
+         case .number, .float: return numbers
+         case .string: return strings
+         case .type: return types
 diff --git a/Sources/CodeEditSourceEditor/TreeSitter/TreeSitterClient.swift b/Sources/CodeEditSourceEditor/TreeSitter/TreeSitterClient.swift
 index 44a0a34..d1da632 100644
 --- a/Sources/CodeEditSourceEditor/TreeSitter/TreeSitterClient.swift

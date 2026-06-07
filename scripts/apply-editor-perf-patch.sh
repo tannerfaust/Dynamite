@@ -66,6 +66,10 @@ is_sourceeditor_highlight_patched() {
             "$checkout/Sources/CodeEditSourceEditor/Highlighting/Highlighter.swift" 2>/dev/null &&
         grep -q "highlighter?.refreshVisibleRanges()" \
             "$checkout/Sources/CodeEditSourceEditor/Controller/TextViewController+Lifecycle.swift" 2>/dev/null &&
+        grep -q '"function.call"' \
+            "$checkout/Sources/CodeEditSourceEditor/Enums/CaptureName.swift" 2>/dev/null &&
+        grep -q "case .function, .method: return commands" \
+            "$checkout/Sources/CodeEditSourceEditor/Theme/EditorTheme.swift" 2>/dev/null &&
         ! grep -q "No storage found for the given provider" \
             "$checkout/Sources/CodeEditSourceEditor/Highlighting/StyledRangeContainer/StyledRangeContainer.swift" \
             2>/dev/null
