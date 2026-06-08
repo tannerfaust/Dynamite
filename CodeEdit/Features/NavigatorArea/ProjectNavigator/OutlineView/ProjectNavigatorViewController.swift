@@ -82,7 +82,9 @@ final class ProjectNavigatorViewController: NSViewController {
         self.outlineView.autosaveExpandedItems = true
         self.outlineView.autosaveName = workspace?.workspaceFileManager?.folderUrl.path ?? ""
         self.outlineView.headerView = nil
-        self.outlineView.menu = ProjectNavigatorMenu(self)
+        let menu = ProjectNavigatorMenu(self)
+        menu.workspace = workspace
+        self.outlineView.menu = menu
         self.outlineView.menu?.delegate = self
         self.outlineView.doubleAction = #selector(onItemDoubleClicked)
         self.outlineView.allowsMultipleSelection = true

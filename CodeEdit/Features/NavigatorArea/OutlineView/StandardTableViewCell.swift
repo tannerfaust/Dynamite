@@ -201,31 +201,103 @@ class StandardTableViewCell: NSTableCellView {
         }
     }
 
-    class SpecialSelectTextField: NSTextField {
-        override func becomeFirstResponder() -> Bool {
-            let range = NSRange(
-                location: 0,
-                length: stringValue.distance(
-                    from: stringValue.startIndex,
-                    to: stringValue.lastIndex(of: ".") ?? stringValue.endIndex
-                )
+    class SpecialTextFieldCell: NSTextFieldCell {
+        var textInsets = NSEdgeInsets(top: 2, left: 6, bottom: 2, right: 6)
+
+        private var isEditingOrSelecting: Bool {
+            if let textField = controlView as? NSTextField,
+               textField.currentEditor() != nil {
+                return true
+            }
+            return false
+        }
+
+        override func drawingRect(forBounds rect: NSRect) -> NSRect {
+            guard isEditingOrSelecting else {
+                return super.drawingRect(forBounds: rect)
+            }
+            let rectWithInsets = NSRect(
+                x: rect.origin.x + textInsets.left,
+                y: rect.origin.y + textInsets.top,
+                width: rect.size.width - textInsets.left - textInsets.right,
+                height: rect.size.height - textInsets.top - textInsets.bottom
             )
+            return super.drawingRect(forBounds: rectWithInsets)
+        }
+
+        override func select(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, start selStart: Int, length selLength: Int) {
+            let rectWithInsets = NSRect(
+                x: rect.origin.x + textInsets.left,
+                y: rect.origin.y + textInsets.top,
+                width: rect.size.width - textInsets.left - textInsets.right,
+                height: rect.size.height - textInsets.top - textInsets.bottom
+            )
+            super.select(withFrame: rectWithInsets, in: controlView, editor: textObj, delegate: delegate, start: selStart, length: selLength)
+        }
+
+        override func edit(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, event: NSEvent?) {
+            let rectWithInsets = NSRect(
+                x: rect.origin.x + textInsets.left,
+                y: rect.origin.y + textInsets.top,
+                width: rect.size.width - textInsets.left - textInsets.right,
+                height: rect.size.height - textInsets.top - textInsets.bottom
+            )
+            super.edit(withFrame: rectWithInsets, in: controlView, editor: textObj, delegate: delegate, event: event)
+        }
+    }
+
+    class SpecialSelectTextField: NSTextField {
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            self.cell = SpecialTextFieldCell()
+        }
+
+        required init?(coder: NSCoder) {
+            super.init(coder: coder)
+            self.cell = SpecialTextFieldCell()
+        }
+
+        override func becomeFirstResponder() -> Bool {
+            let endIdx: String.Index
+            if let lastDot = stringValue.lastIndex(of: "."), lastDot != stringValue.startIndex {
+                endIdx = lastDot
+            } else {
+                endIdx = stringValue.endIndex
+            }
+            let length = stringValue.distance(from: stringValue.startIndex, to: endIdx)
+            let range = NSRange(location: 0, length: length)
             selectText(self)
             let editor = currentEditor()
             editor?.selectedRange = range
             return true
         }
 
+        override func resignFirstResponder() -> Bool {
+            let status = super.resignFirstResponder()
+            if status {
+                wantsLayer = false
+                layer?.backgroundColor = nil
+                layer?.borderWidth = 0
+                layer?.borderColor = nil
+            }
+            return status
+        }
+
         override func textDidBeginEditing(_ notification: Notification) {
             super.textDidBeginEditing(notification)
             wantsLayer = true
-            layer?.backgroundColor = NSColor.textBackgroundColor.cgColor
+            layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+            layer?.cornerRadius = 4
+            layer?.borderWidth = 1
+            layer?.borderColor = NSColor.controlAccentColor.cgColor
         }
 
         override func textDidEndEditing(_ notification: Notification) {
             super.textDidEndEditing(notification)
             wantsLayer = false
             layer?.backgroundColor = nil
+            layer?.borderWidth = 0
+            layer?.borderColor = nil
         }
     }
 }

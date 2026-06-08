@@ -101,14 +101,27 @@ extension ProjectNavigatorMenu {
     /// Opens the rename file dialogue on the cell this was presented from.
     @objc
     func renameFile() {
-        guard let newFile = workspace?.listenerModel.highlightedFileItem else { return }
-        let row = sender.outlineView.row(forItem: newFile)
-        guard row > 0,
-              let cell = sender.outlineView.view(
-                atColumn: 0,
-                row: row,
-                makeIfNecessary: false
-              ) as? ProjectNavigatorTableViewCell else {
+        let fileToRename: CEWorkspaceFile
+        if let selectedFile = selectedItems().first {
+            fileToRename = selectedFile
+        } else if let highlightedFile = workspace?.listenerModel.highlightedFileItem {
+            fileToRename = highlightedFile
+        } else {
+            return
+        }
+
+        sender.reveal(fileToRename)
+
+        let row = sender.outlineView.row(forItem: fileToRename)
+        guard row >= 0 else { return }
+
+        sender.outlineView.layoutSubtreeIfNeeded()
+
+        guard let cell = sender.outlineView.view(
+            atColumn: 0,
+            row: row,
+            makeIfNecessary: true
+        ) as? ProjectNavigatorTableViewCell else {
             return
         }
         sender.outlineView.window?.makeFirstResponder(cell.textField)
