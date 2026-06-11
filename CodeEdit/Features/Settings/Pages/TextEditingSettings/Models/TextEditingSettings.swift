@@ -80,7 +80,12 @@ extension SettingsData {
         var showGutter: Bool = true
 
         /// Toggle the minimap in the editor.
-        var showMinimap: Bool = true
+        ///
+        /// Dynamite defaults this OFF: the minimap runs a second full text-layout engine alongside the editor
+        /// (re-typesetting on every edit/scroll) and widens the syntax-highlight range to everything it shows,
+        /// roughly doubling per-frame editor work. It also has unresolved upstream rendering/scaling-sync bugs.
+        /// Users can re-enable it in Settings → Text Editing or via the "Toggle Minimap" command.
+        var showMinimap: Bool = false
 
         /// Toggle the code folding ribbon.
         var showFoldingRibbon: Bool = true
@@ -145,7 +150,7 @@ extension SettingsData {
             }
 
             self.showGutter = try container.decodeIfPresent(Bool.self, forKey: .showGutter) ?? true
-            self.showMinimap = try container.decodeIfPresent(Bool.self, forKey: .showMinimap) ?? true
+            self.showMinimap = try container.decodeIfPresent(Bool.self, forKey: .showMinimap) ?? false
             self.showFoldingRibbon = try container.decodeIfPresent(Bool.self, forKey: .showFoldingRibbon) ?? true
             self.reformatAtColumn = try container.decodeIfPresent(Int.self, forKey: .reformatAtColumn) ?? 80
             self.showReformattingGuide = try container.decodeIfPresent(

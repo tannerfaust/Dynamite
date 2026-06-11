@@ -38,3 +38,12 @@ custom_rules:
     regex: "\t"
     message: "Prefer spaces for indents over tabs. See Xcode setting: 'Text Editing' -> 'Indentation'"
     severity: warning
+  # ADR-0007 §5 — provider SDK imports must stay inside Features/AIAssist.
+  # This rule fires if an Anthropic/OpenAI/Google provider SDK import appears
+  # outside that folder, making bypass visible in code review.
+  ai_provider_import_guard:
+    included: "(?!.*/Features/AIAssist/).*\\.swift"
+    name: "AI Provider SDK Import Guard"
+    regex: "^import (Anthropic|OpenAI|GoogleGenerativeAI|GoogleAICore)"
+    message: "AI provider SDK imports must stay inside Features/AIAssist/ (ADR-0007 §5)."
+    severity: error

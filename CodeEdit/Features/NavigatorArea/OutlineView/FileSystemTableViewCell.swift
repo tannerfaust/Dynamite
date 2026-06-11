@@ -94,6 +94,19 @@ class FileSystemTableViewCell: StandardTableViewCell {
 
         if fileItem.url.isSymbolicLink { secondaryLabel.stringValue = "􀰞" }
 
+        // Kind badge for product artifacts: show abbreviated kind to the right of git status.
+        if fileItem.url.pathExtension == "md",
+           fileItem.url.path.contains("/product/"),
+           let kind = workspace?.linkIndexManager?.cachedKind(for: fileItem.url.path) {
+            let typedKind = ArtifactKind.from(kind)
+            let badge = typedKind?.shortName ?? String(kind.prefix(4)).uppercased()
+            secondaryLabel.stringValue = badge
+            secondaryLabel.textColor = NSColor(
+                cgColor: (typedKind?.categoryColor ?? .systemGray).cgColor
+            ) ?? .secondaryLabelColor
+            return
+        }
+
         guard let gitStatus = fileItem.gitStatus?.description else {
             return
         }

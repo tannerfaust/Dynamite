@@ -56,11 +56,28 @@ final class ProjectNavigatorTableViewCell: FileSystemTableViewCell {
 
     override func controlTextDidEndEditing(_ obj: Notification) {
         guard let fileItem else { return }
-        textField?.backgroundColor = fileItem.validateFileName(for: textField?.stringValue ?? "") ? .none : errorRed
-        if fileItem.validateFileName(for: textField?.stringValue ?? "") {
+        let textValue = textField?.stringValue ?? ""
+        let isPendingCreation = workspace?.listenerModel.fileItemPendingCreationRename?.id == fileItem.id
+        let movement = (obj.userInfo?["NSTextMovement"] as? Int) ?? 0
+        let cancelled = movement == NSTextMovement.cancel.rawValue
+
+        if isPendingCreation {
+            workspace?.listenerModel.fileItemPendingCreationRename = nil
+            textField?.backgroundColor = .none
+
+            if cancelled || textValue.isEmpty || !fileItem.validateFileName(for: textValue) {
+                workspace?.editorManager?.editorLayout.closeAllTabs(of: fileItem)
+                try? workspace?.workspaceFileManager?.delete(file: fileItem, confirmDelete: false)
+                delegate?.cellDidFinishEditing()
+                return
+            }
+        }
+
+        textField?.backgroundColor = fileItem.validateFileName(for: textValue) ? .none : errorRed
+        if fileItem.validateFileName(for: textValue) {
             let destinationURL = fileItem.url
                 .deletingLastPathComponent()
-                .appending(path: textField?.stringValue ?? "")
+                .appending(path: textValue)
             delegate?.moveFile(file: fileItem, to: destinationURL)
         } else {
             textField?.stringValue = fileItem.labelFileName()

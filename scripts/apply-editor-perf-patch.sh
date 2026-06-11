@@ -44,10 +44,13 @@ is_textview_patched() {
     local checkout="$1"
     [[ -f "$checkout/Sources/CodeEditTextView/TextLine/FastID.swift" ]] &&
         grep -q "FastID.next" "$checkout/Sources/CodeEditTextView/TextLine/LineFragment.swift" 2>/dev/null &&
-        grep -q "layoutManager.frozenWrapWidth != nil" \
-            "$checkout/Sources/CodeEditTextView/TextView/TextView+Layout.swift" 2>/dev/null &&
-        grep -q "scheduleFinalWrapRelayout" \
-            "$checkout/Sources/CodeEditTextView/TextView/TextView+Layout.swift" 2>/dev/null
+        grep -q "FastID.next" "$checkout/Sources/CodeEditTextView/TextLine/TextLine.swift" 2>/dev/null &&
+        grep -q "clusterBreakEnsuringProgress" \
+            "$checkout/Sources/CodeEditTextView/Extensions/CTTypesetter+SuggestLineBreak.swift" 2>/dev/null &&
+        grep -q "Always remove a retired view" \
+            "$checkout/Sources/CodeEditTextView/Utils/ViewReuseQueue.swift" 2>/dev/null &&
+        grep -q "configureLayer" \
+            "$checkout/Sources/CodeEditTextView/TextLine/LineFragmentView.swift" 2>/dev/null
 }
 
 is_sourceeditor_patched() {
@@ -62,6 +65,10 @@ is_sourceeditor_highlight_patched() {
     local checkout="$1"
     grep -q "textView.documentRange.length <= Constants.maxSyncContentLength" \
         "$checkout/Sources/CodeEditSourceEditor/TreeSitter/TreeSitterClient.swift" 2>/dev/null &&
+        grep -q "maxSyncContentLength: Int = 100_000" \
+            "$checkout/Sources/CodeEditSourceEditor/TreeSitter/TreeSitterClient.swift" 2>/dev/null &&
+        grep -q "always shorter than the editor's content height" \
+            "$checkout/Sources/CodeEditSourceEditor/Minimap/MinimapView.swift" 2>/dev/null &&
         grep -q "visibleRangeProvider.visibleTextChanged()" \
             "$checkout/Sources/CodeEditSourceEditor/Highlighting/Highlighter.swift" 2>/dev/null &&
         grep -q "highlighter?.refreshVisibleRanges()" \

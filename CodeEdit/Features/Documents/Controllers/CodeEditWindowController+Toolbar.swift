@@ -29,19 +29,21 @@ extension CodeEditWindowController {
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        var items: [NSToolbarItem.Identifier] = [
+        var items: [NSToolbarItem.Identifier] = []
+
+        if FeatureFlags.cockpitView {
+            items += [.viewModeSwitcher, .flexibleSpace]
+        }
+
+        items += [
             .toggleFirstSidebarItem,
             .flexibleSpace,
         ]
 
-        if #available(macOS 26, *) {
-            items += [.taskSidebarItem]
-        } else {
-            items += [
-                .stopTaskSidebarItem,
-                .startTaskSidebarItem,
-            ]
-        }
+        items += [
+            .stopTaskSidebarItem,
+            .startTaskSidebarItem,
+        ]
 
         items += [
             .sidebarTrackingSeparator,
@@ -85,16 +87,14 @@ extension CodeEditWindowController {
             .notificationItem,
         ]
 
-        if #available(macOS 26, *) {
-            items += [
-                .taskSidebarItem
-            ]
-        } else {
-            items += [
-                .startTaskSidebarItem,
-                .stopTaskSidebarItem
-            ]
+        if FeatureFlags.cockpitView {
+            items += [.viewModeSwitcher]
         }
+
+        items += [
+            .startTaskSidebarItem,
+            .stopTaskSidebarItem,
+        ]
 
         return items
     }
@@ -175,29 +175,19 @@ extension CodeEditWindowController {
             return activityViewerItem()
         case .notificationItem:
             return notificationItem()
-        case .taskSidebarItem:
-            guard #available(macOS 26, *) else {
-                fatalError("Unified task sidebar item used on pre-tahoe platform.")
-            }
-            guard let workspace,
-                    let stop = StopTaskToolbarItem(workspace: workspace) else {
-                return nil
-            }
-            let start = StartTaskToolbarItem(workspace: workspace)
-
-            let group = NSToolbarItemGroup(itemIdentifier: .taskSidebarItem)
-            group.isBordered = true
-            group.controlRepresentation = .expanded
-            group.selectionMode = .momentary
-            group.subitems = [stop, start]
-
-            return group
+        case .viewModeSwitcher:
+            return viewModeSwitcherItem()
         default:
             return NSToolbarItem(itemIdentifier: itemIdentifier)
         }
     }
 
     private func stopTaskSidebarItem() -> NSToolbarItem? {
+        if #available(macOS 26, *) {
+            guard let workspace else { return nil }
+            return StopTaskToolbarItem(workspace: workspace)
+        }
+
         let toolbarItem = NSToolbarItem(itemIdentifier: NSToolbarItem.Identifier.stopTaskSidebarItem)
 
         guard let taskManager = workspace?.taskManager else { return nil }
@@ -211,6 +201,11 @@ extension CodeEditWindowController {
     }
 
     private func startTaskSidebarItem() -> NSToolbarItem? {
+        if #available(macOS 26, *) {
+            guard let workspace else { return nil }
+            return StartTaskToolbarItem(workspace: workspace)
+        }
+
         let toolbarItem = NSToolbarItem(itemIdentifier: NSToolbarItem.Identifier.startTaskSidebarItem)
 
         guard let taskManager = workspace?.taskManager else { return nil }
@@ -231,6 +226,18 @@ extension CodeEditWindowController {
         let view = NSHostingView(rootView: NotificationToolbarItem().environmentObject(workspace))
         toolbarItem.view = view
         return toolbarItem
+    }
+
+    private func viewModeSwitcherItem() -> NSToolbarItem? {
+        guard FeatureFlags.cockpitView else { return nil }
+        let item = NSToolbarItem(itemIdentifier: .viewModeSwitcher)
+        item.visibilityPriority = .high
+        let view = NSHostingView(
+            rootView: ViewModeSwitcherToolbarView(windowController: self)
+        )
+        item.view = view
+        item.toolTip = "Switch between Cockpit and IDE views (⌘1 / ⌘2)"
+        return item
     }
 
     private func activityViewerItem() -> NSToolbarItem? {

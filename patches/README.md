@@ -61,15 +61,39 @@ side panes are all present.
 `codeedittextview-resize-perf.patch` targets CodeEditTextView 0.12.1
 (`d7ac3f1`):
 
-- Adds `frozenWrapWidth` so wrapped text does not re-typeset from every AppKit
-  layout pass.
-- Adds a bounded live re-wrap scheduler so wrapped text still changes during
-  resize at a controlled rate, with a final exact re-wrap after the width
-  settles.
 - Adds `FastID.next()` to avoid CSPRNG-backed `UUID()` in hot line-fragment
-  constructors.
+  constructors (the dominant cost of the resize re-typeset storm).
 - Guarantees typesetting forward progress for unsized or zero-width views so
-  minimap/window-restoration paths cannot spin forever.
+  minimap/window-restoration paths cannot spin forever (the launch-hang fix).
+- **Fixes "ghost" duplicated text on wrapped lines** (the next line's first word
+  appearing clipped at the end of the line above it, and an unreliable/unclickable
+  right edge). **The actual root cause is in `Typesetter.layoutTextUntilLineBreak`:**
+  `suggestLineBreak` returns an *offset relative to the run start* (`start + count`),
+  but the code used it as the CTLine *length* — so every wrapped fragment after a
+  run's first was built `start` characters too long. The oversized CTLine re-drew the
+  next row's text past the break point (visible as duplicated text clipped at the
+  right edge on lines wrapped to **3+ rows**; the last fragment self-clamps, which is
+  why 2-row wraps looked fine) and corrupted hit-testing near the wrap boundary
+  (clicks in the overflow region resolved to the next row's characters). Fixed by
+  computing `fragmentLength = lineBreak - runRelativeStart` and using that as the
+  CTLine length (and in the 0-fit pop-retry check, which previously compared the
+  absolute offset to `1`). Regression test:
+  `TypesetterTests.test_wrappedFragmentCTLinesMatchFragmentRanges` asserts every
+  fragment's CTLine range equals the fragment's range exactly.
+
+  Two earlier mitigations in this patch treated symptoms of the same bug and are
+  kept as hardening: `ViewReuseQueue` always removes retired fragment views from
+  the view hierarchy, and `LineFragmentView` gets its own backing layer.
+  Reproduces on **pristine upstream CodeEditTextView 0.12.1**, so this is an
+  upstream bug, not Dynamite's.
+
+  **Note:** earlier versions of this patch added a `frozenWrapWidth` + deferred
+  re-wrap scheduler (removed — it left text wrapped at a stale width) and a
+  `maxLineLayoutWidth` width>0 guard (removed — it forced a momentarily-unsized
+  line to typeset *unwrapped* as one wide fragment, feeding the ghost bug;
+  upstream instead makes a harmless empty placeholder via the typesetter's
+  `maxWidth <= 0` fast path). Resize stays smooth from `FastID` + async
+  highlighting + minimap-off.
 
 `codeeditsourceeditor-resize-perf.patch` targets CodeEditSourceEditor
 (`ee0c00a`):
@@ -84,7 +108,15 @@ side panes are all present.
 CodeEditSourceEditor (`ee0c00a`):
 
 - Builds the initial Tree-sitter state synchronously for documents under the
-  package's existing synchronous-content threshold.
+  synchronous-content threshold (`Constants.maxSyncContentLength`).
+- Lowers that threshold from the upstream `1_000_000` to `100_000`. At 1MB,
+  opening or growing a file of a few hundred KB ran a full synchronous
+  Tree-sitter parse (and a synchronous highlight query on `setUp`) on the main
+  thread, stalling the UI for hundreds of milliseconds — the "open a big file →
+  freeze / animations jam" report. Documents above ~100KB now parse, query, and
+  apply edits on the background executor (the same async path >1MB files already
+  used); the visible range colors in a frame or two later. A brief uncolored
+  flash on a large file is far cheaper than a frozen UI.
 - Invalidates visible highlight ranges immediately when providers are installed,
   so the first editor paint does not wait for a later scroll or frame-change
   notification before requesting syntax colors.
@@ -98,6 +130,22 @@ CodeEditSourceEditor (`ee0c00a`):
   code windows get complete syntax coloring instead of unstyled tokens.
 - Routes functions and methods to the theme's command color and booleans or
   builtins to the value color, matching the main workspace editor appearance.
+- Fixes the minimap rendering blank ("shows nothing yet there is content") and
+  the visible-region box desynchronizing at certain sizes. Both stemmed from one
+  guard in `MinimapView.updateContentViewHeight()` (`height < textView.frame.height`)
+  that mis-fired during early layout when the editor frame height was still 0,
+  leaving the minimap content view stuck at 1px. Replaced with a positive/finite
+  height check; the existing `!=` guard still prevents layout loops. (The minimap
+  is also now off by default in the app — it runs a second layout engine — but
+  this makes it correct for users who re-enable it.)
+- **Fixes the unclickable right-edge dead zone when the minimap is hidden.**
+  `MinimapView.hitTest(_:)` is a custom override, which bypasses AppKit's
+  built-in hidden-view check — so a minimap hidden via "Show Minimap" off still
+  claimed every click inside its ~140pt frame floating over the editor's right
+  edge, and its overridden `mouseDown`/`mouseDragged` (which intentionally eat
+  events) silently swallowed them. Verified live via `lldb` hit-testing: points
+  on the right edge returned the hidden `MinimapView` instead of the text view.
+  Fixed with a `!isHidden` guard at the top of `hitTest`.
 
 ## Durability
 

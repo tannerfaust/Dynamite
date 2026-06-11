@@ -53,6 +53,17 @@ struct EditorTabBarTrailingAccessories: View {
         Button(action: {}, label: { Image(systemName: "slider.horizontal.3") })
             .overlay {
                 Menu {
+                    if codeFile.isMarkdown {
+                        Toggle(
+                            "Markdown Preview",
+                            isOn: Binding(
+                                get: { [weak codeFile] in codeFile?.markdownPreview ?? false },
+                                set: { [weak codeFile] in codeFile?.markdownPreview = $0 }
+                            )
+                        )
+                        .keyboardShortcut("R", modifiers: [.command, .shift])
+                        Divider()
+                    }
                     Toggle("Show Minimap", isOn: $showMinimap)
                         .keyboardShortcut("M", modifiers: [.command, .shift, .control])
                     Divider()

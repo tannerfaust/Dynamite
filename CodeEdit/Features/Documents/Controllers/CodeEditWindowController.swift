@@ -20,6 +20,12 @@ final class CodeEditWindowController: NSWindowController, NSToolbarDelegate, Obs
     @Published var prevUtilityAreaCollapsed: Bool?
     @Published var prevToolbarCollapsed: Bool?
 
+    /// Current view mode for this window. `.ide` is the default and the only mode in Phase A.
+    ///
+    /// Written exclusively by `ShellViewController.setViewMode(_:animated:)`. Toolbar and menu
+    /// items observe this property to reflect the active mode.
+    @Published var viewMode: ViewMode = .ide
+
     private var panelOpen = false
 
     var observers: [NSKeyValueObservation] = []
@@ -32,8 +38,12 @@ final class CodeEditWindowController: NSWindowController, NSToolbarDelegate, Obs
 
     internal var cancellables = [AnyCancellable]()
 
+    /// The IDE split view controller, accessed through the `ShellViewController` container.
+    ///
+    /// Returns `nil` in Phase B when in Cockpit mode and the IDE child hasn't been built yet,
+    /// though in practice the IDE child is always built first and retained indefinitely.
     var splitViewController: CodeEditSplitViewController? {
-        contentViewController as? CodeEditSplitViewController
+        (contentViewController as? ShellViewController)?.ideViewController
     }
 
     init(
@@ -45,17 +55,30 @@ final class CodeEditWindowController: NSWindowController, NSToolbarDelegate, Obs
         guard let workspace else { return }
         self.workspace = workspace
         self.toolbarCollapsed = workspace.getFromWorkspaceState(.toolbarCollapsed) as? Bool ?? false
-        guard let splitViewController = setupSplitView(with: workspace) else {
+
+        guard let shellViewController = setupShell(with: workspace) else {
             fatalError("Failed to set up content view.")
         }
 
-        contentViewController = splitViewController
+        // Setting contentViewController triggers ShellViewController.viewDidLoad synchronously,
+        // which builds the IDE child and calls ideVC.view (loading ideVC too). By the time this
+        // assignment returns, shellVC.ideViewController and its splitViewItems are populated.
+        contentViewController = shellViewController
+
+        navigatorSidebarViewModel = shellViewController.navigatorViewModel
+        listenToDocumentEdited(workspace: workspace)
+
+        guard let ideVC = shellViewController.ideViewController,
+              let firstItem = ideVC.splitViewItems.first,
+              let lastItem = ideVC.splitViewItems.last else {
+            fatalError("ShellViewController did not produce an IDE view controller.")
+        }
 
         observers = [
-            splitViewController.splitViewItems.first!.observe(\.isCollapsed, changeHandler: { [weak self] item, _ in
+            firstItem.observe(\.isCollapsed, changeHandler: { [weak self] item, _ in
                 self?.navigatorCollapsed = item.isCollapsed
             }),
-            splitViewController.splitViewItems.last!.observe(\.isCollapsed, changeHandler: { [weak self] item, _ in
+            lastItem.observe(\.isCollapsed, changeHandler: { [weak self] item, _ in
                 self?.inspectorCollapsed = item.isCollapsed
             })
         ]
@@ -75,20 +98,20 @@ final class CodeEditWindowController: NSWindowController, NSToolbarDelegate, Obs
         fatalError("init(coder:) has not been implemented")
     }
 
-    private func setupSplitView(with workspace: WorkspaceDocument) -> CodeEditSplitViewController? {
-        guard let window else {
+    private func setupShell(with workspace: WorkspaceDocument) -> ShellViewController? {
+        guard window != nil else {
             assertionFailure("No window found for this controller. Cannot set up content.")
             return nil
         }
+        return ShellViewController(workspace: workspace, windowController: self)
+    }
 
-        let navigatorModel = NavigatorAreaViewModel()
-        navigatorSidebarViewModel = navigatorModel
-        self.listenToDocumentEdited(workspace: workspace)
-        return CodeEditSplitViewController(
-            workspace: workspace,
-            navigatorViewModel: navigatorModel,
-            windowRef: window
-        )
+    // MARK: - Mode switching
+
+    /// Switches the window to `mode`. No-op when `FeatureFlags.cockpitView` is false.
+    func switchViewMode(to mode: ViewMode) {
+        guard FeatureFlags.cockpitView else { return }
+        (contentViewController as? ShellViewController)?.setViewMode(mode)
     }
 
     private func getSelectedCodeFile() -> CodeFileDocument? {

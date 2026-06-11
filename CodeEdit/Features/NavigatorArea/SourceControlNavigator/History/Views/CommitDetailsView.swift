@@ -15,6 +15,7 @@ struct CommitDetailsView: View {
     @State var commitChanges: [GitChangedFile] = []
 
     @State var selection: CEWorkspaceFile?
+    @State private var diffSource: DiffSource?
 
     func updateCommitChanges() async throws {
         if let commit = commit {
@@ -55,6 +56,26 @@ struct CommitDetailsView: View {
 
                     }
                     .environment(\.defaultMinListRowHeight, 22)
+                    .contextMenu(
+                        forSelectionType: CEWorkspaceFile.self,
+                        menu: { _ in EmptyView() },
+                        primaryAction: { _ in }
+                    )
+                    .onChange(of: selection) { _, newSelection in
+                        if let file = newSelection,
+                           let changed = commitChanges.first(where: { $0.ceFileKey == file.id }) {
+                            diffSource = DiffSource(
+                                source: .commit(
+                                    commitHash: commit.commitHash,
+                                    filePath: changed.fileURL.path(percentEncoded: false)
+                                ),
+                                gitClient: sourceControlManager.gitClient
+                            )
+                        }
+                    }
+                    .sheet(item: $diffSource) { item in
+                        DiffPaneView(source: item.source, gitClient: item.gitClient)
+                    }
                 } else {
                     CEContentUnavailableView("No Changes")
                 }

@@ -20,8 +20,8 @@ struct CodeEditCommands: Commands {
             NavigateCommands()
             TasksCommands()
             if sourceControlIsEnabled { SourceControlCommands() }
-            EditorCommands()
-            ExtensionCommands()
+            if FeatureFlags.editorStructureMenu { EditorCommands() }
+            if FeatureFlags.extensionsMenu { ExtensionCommands() }
             WindowCommands()
         }
         HelpCommands()

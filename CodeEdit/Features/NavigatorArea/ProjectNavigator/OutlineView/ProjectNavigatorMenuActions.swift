@@ -81,15 +81,13 @@ extension ProjectNavigatorMenu {
         try? process.run()
     }
 
-    // TODO: allow custom file names
-    /// Action that creates a new untitled file
+    /// Action that creates a new file and immediately prompts for its name inline.
     @objc
     func newFile() {
         guard let item else { return }
         do {
             if let newFile = try workspace?.workspaceFileManager?.addFile(fileName: "untitled", toFile: item) {
-                workspace?.listenerModel.highlightedFileItem = newFile
-                workspace?.editorManager?.openTab(item: newFile)
+                workspace?.listenerModel.requestCreationRename(newFile)
             }
         } catch {
             let alert = NSAlert(error: error)
@@ -110,21 +108,7 @@ extension ProjectNavigatorMenu {
             return
         }
 
-        sender.reveal(fileToRename)
-
-        let row = sender.outlineView.row(forItem: fileToRename)
-        guard row >= 0 else { return }
-
-        sender.outlineView.layoutSubtreeIfNeeded()
-
-        guard let cell = sender.outlineView.view(
-            atColumn: 0,
-            row: row,
-            makeIfNecessary: true
-        ) as? ProjectNavigatorTableViewCell else {
-            return
-        }
-        sender.outlineView.window?.makeFirstResponder(cell.textField)
+        sender.beginRenaming(fileToRename)
     }
 
     // TODO: Automatically identified the file type
@@ -141,9 +125,7 @@ extension ProjectNavigatorMenu {
                     toFile: item,
                     contents: clipBoardContent
                 ) {
-                workspace?.listenerModel.highlightedFileItem = newFile
-                workspace?.editorManager?.openTab(item: newFile)
-                renameFile()
+                workspace?.listenerModel.requestCreationRename(newFile)
             }
         } catch {
             let alert = NSAlert(error: error)
@@ -152,14 +134,13 @@ extension ProjectNavigatorMenu {
         }
     }
 
-    // TODO: allow custom folder names
-    /// Action that creates a new untitled folder
+    /// Action that creates a new folder and immediately prompts for its name inline.
     @objc
     func newFolder() {
         guard let item else { return }
         do {
             if let newFolder = try workspace?.workspaceFileManager?.addFolder(folderName: "untitled", toFile: item) {
-                workspace?.listenerModel.highlightedFileItem = newFolder
+                workspace?.listenerModel.requestCreationRename(newFolder)
             }
         } catch {
             let alert = NSAlert(error: error)

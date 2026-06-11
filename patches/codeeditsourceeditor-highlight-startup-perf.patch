@@ -116,6 +116,45 @@ index c77e2b5..70bb41b 100644
              return
          }
          var runs: [RangeStoreRun<StyleElement>] = []
+diff --git a/Sources/CodeEditSourceEditor/Minimap/MinimapView.swift b/Sources/CodeEditSourceEditor/Minimap/MinimapView.swift
+index afd97de..ef2fd5f 100644
+--- a/Sources/CodeEditSourceEditor/Minimap/MinimapView.swift
++++ b/Sources/CodeEditSourceEditor/Minimap/MinimapView.swift
+@@ -267,7 +267,11 @@ public class MinimapView: FlippedNSView {
+     }
+
+     override public func hitTest(_ point: NSPoint) -> NSView? {
+-        guard let point = superview?.convert(point, to: self) else { return nil }
++        // Dynamite fix: a custom hitTest bypasses AppKit's built-in hidden check, so a *hidden*
++        // minimap still claimed every click in its ~140pt frame over the editor's right edge
++        // (and mouseDown/mouseDragged below swallow the events) — making the right side of the
++        // editor an unclickable dead zone whenever the minimap was toggled off.
++        guard !isHidden, let point = superview?.convert(point, to: self) else { return nil }
+         // For performance, don't hitTest the layout fragment views, but make sure the `documentVisibleView` is
+         // hittable.
+         if documentVisibleView.frame.contains(point) {
+@@ -302,10 +306,19 @@ public class MinimapView: FlippedNSView {
+             size: CGSize(width: contentView.frame.width, height: height)
+         ).pixelAligned
+
+-        // Only update a frame if needed
++        // Only update a frame if needed.
++        //
++        // Dynamite fix: the upstream guard here was `height < textView.frame.height`. During early layout the
++        // editor's `frame.height` is still 0, so that guard was false and the content view stayed stuck at its
++        // initial 1px height — the minimap rendered blank even though the document had content ("shows nothing
++        // yet there is"). Because the visible-box scale math divides by `minimapHeight`, a stale/unset content
++        // height also desynchronized the visible-region box at certain sizes. The old guard was structurally
++        // redundant anyway (minimap lines are ~2px vs the editor's full line height, so the minimap content is
++        // always shorter than the editor's content height), so it only ever mis-fired. Requiring a positive,
++        // finite height instead fixes both symptoms; the `!=` check above still prevents any layout loop.
+         if contentViewHeightConstraint.constant != newFrame.height
+             && height.isFinite
+-            && height < (textView?.frame.height ?? 0.0) {
++            && height > 0 {
+             contentViewHeightConstraint.constant = newFrame.height
+             contentViewHeightConstraint.isActive = true
+             updateConstraints()
 diff --git a/Sources/CodeEditSourceEditor/Theme/EditorTheme.swift b/Sources/CodeEditSourceEditor/Theme/EditorTheme.swift
 index c44cfc9..ee6c667 100644
 --- a/Sources/CodeEditSourceEditor/Theme/EditorTheme.swift
@@ -138,10 +177,33 @@ index c44cfc9..ee6c667 100644
          case .string: return strings
          case .type: return types
 diff --git a/Sources/CodeEditSourceEditor/TreeSitter/TreeSitterClient.swift b/Sources/CodeEditSourceEditor/TreeSitter/TreeSitterClient.swift
-index 44a0a34..d1da632 100644
+index 44a0a34..85ae73a 100644
 --- a/Sources/CodeEditSourceEditor/TreeSitter/TreeSitterClient.swift
 +++ b/Sources/CodeEditSourceEditor/TreeSitter/TreeSitterClient.swift
-@@ -129,7 +129,7 @@ public final class TreeSitterClient: HighlightProviding {
+@@ -75,8 +75,20 @@ public final class TreeSitterClient: HighlightProviding {
+         /// The maximum length of an edit before it must be processed asynchronously
+         public static var maxSyncEditLength: Int = 1024
+
+-        /// The maximum length a document can be before all queries and edits must be processed asynchronously.
+-        public static var maxSyncContentLength: Int = 1_000_000
++        /// The maximum length a document can be before all parses, queries, and edits must be processed
++        /// asynchronously (off the main thread).
++        ///
++        /// Dynamite lowered this from the upstream `1_000_000`. At 1MB, opening (or growing, via typing/paste) a
++        /// file of a few hundred KB ran a full synchronous tree-sitter parse — plus a synchronous highlight query
++        /// on `setUp` — on the main thread, stalling the UI for hundreds of milliseconds (the "open a big file →
++        /// freeze / animations jam" bug). Documents above this size now parse and highlight on the executor's
++        /// background queue; the visible range colors in a frame or two later via `invalidate()` /
++        /// `refreshVisibleRanges()`. A brief uncolored flash on a large file is far cheaper than a frozen UI, and
++        /// this is the same async path documents over 1MB already used in production.
++        ///
++        /// ~100KB keeps small/medium files fully synchronous (no flash, parse well under one frame) while keeping
++        /// the main thread free for anything larger.
++        public static var maxSyncContentLength: Int = 100_000
+
+         /// The maximum length a query can be before it must be performed asynchronously.
+         public static var maxSyncQueryLength: Int = 4096
+@@ -129,7 +141,7 @@ public final class TreeSitterClient: HighlightProviding {
          }
 
          executor.cancelAll(below: .all)

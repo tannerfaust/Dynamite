@@ -28,6 +28,11 @@ struct ViewCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .toolbar) {
+            if FeatureFlags.cockpitView {
+                ModeSwitcherCommands()
+                Divider()
+            }
+
             Button("Show Command Palette") {
                 NSApp.sendAction(#selector(CodeEditWindowController.openCommandPalette(_:)), to: nil, from: nil)
             }
@@ -161,12 +166,45 @@ extension ViewCommands {
         var body: some View {
             Menu("Navigators", content: {
                 ForEach(Array(model.tabItems.prefix(9).enumerated()), id: \.element) { index, tab in
-                    Button(tab.title) {
-                        model.setNavigatorTab(tab: tab)
+                    if FeatureFlags.cockpitView {
+                        // ⌘1/⌘2 are reserved for Cockpit/IDE mode switching (ADR-0006 §6).
+                        // Navigator tabs move to ⌃⌘1–⌃⌘9 in Phase B so the keys never collide.
+                        Button(tab.title) {
+                            model.setNavigatorTab(tab: tab)
+                        }
+                        .keyboardShortcut(
+                            KeyEquivalent(Character(String(index + 1))),
+                            modifiers: [.control, .command]
+                        )
+                    } else {
+                        Button(tab.title) {
+                            model.setNavigatorTab(tab: tab)
+                        }
+                        .keyboardShortcut(KeyEquivalent(Character(String(index + 1))))
                     }
-                    .keyboardShortcut(KeyEquivalent(Character(String(index + 1))))
                 }
             })
+        }
+    }
+}
+
+// MARK: - Mode switcher commands (Phase B)
+
+extension ViewCommands {
+    /// ⌘1 / ⌘2 mode-switch commands — only registered when `FeatureFlags.cockpitView` is true.
+    struct ModeSwitcherCommands: View {
+        @UpdatingWindowController var windowController: CodeEditWindowController?
+
+        var body: some View {
+            Button("Show Cockpit") {
+                windowController?.switchViewMode(to: .cockpit)
+            }
+            .keyboardShortcut("1", modifiers: .command)
+
+            Button("Show IDE") {
+                windowController?.switchViewMode(to: .ide)
+            }
+            .keyboardShortcut("2", modifiers: .command)
         }
     }
 }

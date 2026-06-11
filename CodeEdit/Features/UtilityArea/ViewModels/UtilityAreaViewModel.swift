@@ -31,7 +31,13 @@ class UtilityAreaViewModel: ObservableObject {
     @Published var currentHeight: Double = 0
 
     /// The tab bar items for the UtilityAreaView
-    @Published var tabItems: [UtilityAreaTab] = UtilityAreaTab.allCases
+    @Published var tabItems: [UtilityAreaTab] = UtilityAreaTab.allCases.filter { tab in
+        switch tab {
+        case .debugConsole: return FeatureFlags.utilityDebugConsoleTab
+        case .output: return FeatureFlags.utilityOutputTab
+        default: return true
+        }
+    }
 
     /// The tab bar view model for UtilityAreaTabView
     @Published var tabViewModel = UtilityAreaTabViewModel()

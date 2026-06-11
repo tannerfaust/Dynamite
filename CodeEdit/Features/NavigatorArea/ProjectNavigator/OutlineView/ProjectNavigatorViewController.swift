@@ -151,6 +151,28 @@ final class ProjectNavigatorViewController: NSViewController {
         updateSelection(itemID: workspace?.editorManager?.activeEditor.selectedTab?.file.id, forcesReveal: true)
     }
 
+    /// Focuses the inline name editor for a file or folder in the project navigator.
+    func beginRenaming(_ fileToRename: CEWorkspaceFile) {
+        if let parent = fileToRename.parent {
+            outlineView.reloadItem(parent, reloadChildren: true)
+        }
+        reveal(fileToRename)
+
+        let row = outlineView.row(forItem: fileToRename)
+        guard row >= 0 else { return }
+
+        outlineView.layoutSubtreeIfNeeded()
+
+        guard let cell = outlineView.view(
+            atColumn: 0,
+            row: row,
+            makeIfNecessary: true
+        ) as? ProjectNavigatorTableViewCell else {
+            return
+        }
+        outlineView.window?.makeFirstResponder(cell.textField)
+    }
+
     /// Updates the selection of the ``outlineView`` whenever it changes.
     ///
     /// Most importantly when the `id` changes from an external view.

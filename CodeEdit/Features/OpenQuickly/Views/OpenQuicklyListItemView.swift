@@ -41,6 +41,17 @@ struct OpenQuicklyListItemView: View {
                     .truncationMode(.middle)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let kindString = searchResult.artifactKind {
+                KindBadge(
+                    kind: ArtifactKind.from(kindString),
+                    kindString: kindString,
+                    size: .compact
+                )
+            }
+            if let status = searchResult.artifactStatus {
+                StatusBadge(status: status)
+            }
         }
         .frame(maxWidth: .infinity)
     }

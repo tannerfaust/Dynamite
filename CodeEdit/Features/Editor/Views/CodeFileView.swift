@@ -113,11 +113,35 @@ struct CodeFileView: View {
     @Environment(\.edgeInsets)
     private var edgeInsets
 
+    private var markdownTheme: MarkdownTheme {
+        MarkdownTheme.from(editor: currentTheme.editor, baseFont: font)
+    }
+
+    @ViewBuilder
     var body: some View {
+        Group {
+            if isEditable, codeFile.isMarkdown, codeFile.markdownPreview == true {
+                MarkdownEditorView(codeFile: codeFile, theme: markdownTheme)
+            } else {
+                sourceEditor
+            }
+        }
+        // This view needs to refresh when the codefile changes. The file URL is too stable.
+        .id(ObjectIdentifier(codeFile))
+        .background(useThemeBackground ? Color(currentTheme.editor.background.color) : Color(NSColor.textBackgroundColor))
+        .colorScheme(currentTheme.appearance == .dark ? .dark : .light)
+        // minHeight zero fixes a bug where the app would freeze if the contents of the file are empty.
+        .frame(minHeight: .zero, maxHeight: .infinity)
+        .onChange(of: settingsFont) { _, newFontSetting in
+            font = newFontSetting.current
+        }
+    }
+
+    private var sourceEditor: some View {
         let effectiveWrapLines = codeFile.wrapLines ?? wrapLinesToEditorWidth
         let effectiveShowMinimap = showMinimapOverride ?? showMinimap
 
-        SourceEditor(
+        return SourceEditor(
             codeFile.content ?? NSTextStorage(),
             language: codeFile.getLanguage(),
             configuration: SourceEditorConfiguration(
@@ -173,15 +197,6 @@ struct CodeFileView: View {
             undoManager: undoRegistration.manager(forFile: editorInstance.file),
             coordinators: textViewCoordinators
         )
-        // This view needs to refresh when the codefile changes. The file URL is too stable.
-        .id(ObjectIdentifier(codeFile))
-        .background(useThemeBackground ? Color(currentTheme.editor.background.color) : Color(NSColor.textBackgroundColor))
-        .colorScheme(currentTheme.appearance == .dark ? .dark : .light)
-        // minHeight zero fixes a bug where the app would freeze if the contents of the file are empty.
-        .frame(minHeight: .zero, maxHeight: .infinity)
-        .onChange(of: settingsFont) { _, newFontSetting in
-            font = newFontSetting.current
-        }
     }
 
     /// Determines the style of bracket emphasis based on the `bracketEmphasis` setting and the current theme.

@@ -98,3 +98,7 @@ iOSInjectionProject/
 .codeedit
 .idea
 .vscode
+
+# Dynamite local/runtime artifacts
+.dynamite/
+*.profraw

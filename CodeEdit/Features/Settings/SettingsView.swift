@@ -94,6 +94,13 @@ struct SettingsView: View {
         ),
         .init(
             SettingsPage(
+                .aiAssist,
+                baseColor: .indigo,
+                icon: .system("sparkles")
+            )
+        ),
+        .init(
+            SettingsPage(
                 .developer,
                 baseColor: .pink,
                 icon: .system("bolt")
@@ -142,6 +149,8 @@ struct SettingsView: View {
             }
         } else if !page.isSetting {
             if page.name == .developer && !showDeveloperSettings {
+                EmptyView()
+            } else if page.name == .languageServers && !FeatureFlags.languageServersSettings {
                 EmptyView()
             } else {
                 SettingsPageView(page, searchText: searchText)
@@ -200,6 +209,8 @@ struct SettingsView: View {
                     LocationsSettingsView()
                 case .languageServers:
                     LanguageServersView()
+                case .aiAssist:
+                    AIAssistSettingsView()
                 case .developer:
                     DeveloperSettingsView()
                 default:

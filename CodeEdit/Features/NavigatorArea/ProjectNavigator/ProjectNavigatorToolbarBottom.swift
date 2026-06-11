@@ -106,8 +106,7 @@ struct ProjectNavigatorToolbarBottom: View {
                         fileName: "untitled",
                         toFile: rootFile
                     ) {
-                        workspace.listenerModel.highlightedFileItem = newFile
-                        workspace.editorManager?.openTab(item: newFile)
+                        workspace.listenerModel.requestCreationRename(newFile)
                     }
                 } catch {
                     let alert = NSAlert(error: error)
@@ -124,7 +123,7 @@ struct ProjectNavigatorToolbarBottom: View {
                         folderName: "untitled",
                         toFile: rootFile
                     ) {
-                        workspace.listenerModel.highlightedFileItem = newFolder
+                        workspace.listenerModel.requestCreationRename(newFolder)
                     }
                 } catch {
                     let alert = NSAlert(error: error)

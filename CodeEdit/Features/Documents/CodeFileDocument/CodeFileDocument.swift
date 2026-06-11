@@ -63,6 +63,10 @@ final class CodeFileDocument: NSDocument, ObservableObject {
     /// Document-specific overridden line wrap preference.
     @Published var wrapLines: Bool?
 
+    /// Whether to show the live markdown (WYSIWYG) rendering instead of the raw editor.
+    /// Only meaningful for markdown documents. `nil`/`false` shows the raw source editor.
+    @Published var markdownPreview: Bool?
+
     /// Set up by ``LanguageServer``, conforms this type to ``LanguageServerDocument``.
     @Published var languageServerObjects: LanguageServerDocumentObjects<CodeFileDocument> = .init()
 
@@ -279,7 +283,7 @@ final class CodeFileDocument: NSDocument, ObservableObject {
     }
 
     /// Helper to find the last modified date of the represented file item.
-    /// 
+    ///
     /// Different from `NSDocument.fileModificationDate`. This returns the *current* modification date, whereas the
     /// alternative stores the date that existed when we last read the file.
     private func getModificationDate() -> Date? {
@@ -338,6 +342,15 @@ final class CodeFileDocument: NSDocument, ObservableObject {
 
     func findWorkspace() -> WorkspaceDocument? {
         fileURL?.findWorkspace()
+    }
+
+    /// Whether this document is a markdown file (eligible for the live markdown rendering mode).
+    var isMarkdown: Bool {
+        if getLanguage().id == .markdown {
+            return true
+        }
+        let ext = fileURL?.pathExtension.lowercased()
+        return ext == "md" || ext == "markdown" || ext == "mdown" || ext == "mkd"
     }
 }
 

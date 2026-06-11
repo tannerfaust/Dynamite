@@ -30,6 +30,7 @@ extension ProjectNavigatorViewController: NSOutlineViewDelegate {
             delegate: self,
             navigatorFilter: workspace?.navigatorFilter
         )
+        cell.workspace = workspace
         return cell
     }
 

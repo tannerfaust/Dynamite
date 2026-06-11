@@ -44,6 +44,9 @@ final class WorkspaceDocument: NSDocument, ObservableObject, NSToolbarDelegate {
     var taskManager: TaskManager?
     var workspaceSettingsManager: CEWorkspaceSettings?
     var taskNotificationHandler: TaskNotificationHandler = TaskNotificationHandler()
+    var linkIndexManager: LinkIndexManager?
+    /// Workspace-relative route dispatcher (ADR-0006 §3). Created once per workspace in `initWorkspaceState`.
+    var router: Router?
 
     var undoRegistration: UndoManagerRegistration = UndoManagerRegistration()
 
@@ -171,6 +174,17 @@ final class WorkspaceDocument: NSDocument, ObservableObject, NSToolbarDelegate {
         }
         self.taskNotificationHandler.workspaceURL = url
 
+        do {
+            self.linkIndexManager = try LinkIndexManager(workspaceURL: url)
+            Task {
+                try? await self.linkIndexManager?.rebuildIndex()
+            }
+        } catch {
+            Swift.print("Failed to init LinkIndexManager: \(error)")
+        }
+
+        self.router = Router(workspace: self)
+
         workspaceFileManager?.addObserver(undoRegistration)
         editorManager?.restoreFromState(self)
         utilityAreaModel?.restoreFromState(self)
@@ -202,6 +216,8 @@ final class WorkspaceDocument: NSDocument, ObservableObject, NSToolbarDelegate {
         workspaceSettingsManager?.cleanUp()
         workspaceSettingsManager = nil
         taskManager = nil
+        linkIndexManager = nil
+        router = nil
     }
 
     /// Determines the windows should be closed.
