@@ -1,3 +1,4 @@
+// swiftlint:disable identifier_name
 //
 //  AIKeychainStore.swift
 //  CodeEdit
@@ -25,10 +26,10 @@ enum AIKeychainStore {
         try? delete(for: provider)
 
         let query: [CFString: Any] = [
-            kSecClass:       kSecClassGenericPassword,
+            kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
             kSecAttrAccount: account,
-            kSecValueData:   data
+            kSecValueData: data
         ]
 
         let status = SecItemAdd(query as CFDictionary, nil)
@@ -39,11 +40,11 @@ enum AIKeychainStore {
 
     static func load(for provider: AIProviderID) -> String? {
         let query: [CFString: Any] = [
-            kSecClass:            kSecClassGenericPassword,
-            kSecAttrService:      service,
-            kSecAttrAccount:      provider.rawValue,
-            kSecReturnData:       true,
-            kSecMatchLimit:       kSecMatchLimitOne
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: service,
+            kSecAttrAccount: provider.rawValue,
+            kSecReturnData: true,
+            kSecMatchLimit: kSecMatchLimitOne
         ]
 
         var result: AnyObject?
@@ -54,7 +55,7 @@ enum AIKeychainStore {
 
     static func delete(for provider: AIProviderID) throws {
         let query: [CFString: Any] = [
-            kSecClass:       kSecClassGenericPassword,
+            kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
             kSecAttrAccount: provider.rawValue
         ]

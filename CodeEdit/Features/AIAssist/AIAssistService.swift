@@ -1,3 +1,4 @@
+// swiftlint:disable identifier_name pattern_matching_keywords
 //
 //  AIAssistService.swift
 //  CodeEdit

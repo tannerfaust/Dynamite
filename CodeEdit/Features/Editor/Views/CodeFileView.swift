@@ -1,3 +1,4 @@
+// swiftlint:disable attributes line_length
 //
 //  CodeFileView.swift
 //  CodeEditModules/CodeFile

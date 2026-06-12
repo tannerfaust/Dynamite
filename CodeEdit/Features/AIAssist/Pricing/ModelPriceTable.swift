@@ -15,12 +15,12 @@ enum ModelPriceTable {
     static func anthropic(modelID: String) -> (input: Double, output: Double) {
         switch modelID {
         case "claude-opus-4-5":    return (input: 15.00, output: 75.00)
-        case "claude-sonnet-4-5":  return (input:  3.00, output: 15.00)
-        case "claude-haiku-4-5":   return (input:  0.25, output:  1.25)
+        case "claude-sonnet-4-5":  return (input: 3.00, output: 15.00)
+        case "claude-haiku-4-5":   return (input: 0.25, output: 1.25)
         case "claude-opus-4":      return (input: 15.00, output: 75.00)
-        case "claude-sonnet-4":    return (input:  3.00, output: 15.00)
-        case "claude-haiku-4":     return (input:  0.25, output:  1.25)
-        default:                   return (input:  3.00, output: 15.00) // conservative fallback
+        case "claude-sonnet-4":    return (input: 3.00, output: 15.00)
+        case "claude-haiku-4":     return (input: 0.25, output: 1.25)
+        default:                   return (input: 3.00, output: 15.00) // conservative fallback
         }
     }
 
@@ -28,11 +28,11 @@ enum ModelPriceTable {
 
     static func openAI(modelID: String) -> (input: Double, output: Double) {
         switch modelID {
-        case "gpt-4o":             return (input:  2.50, output: 10.00)
-        case "gpt-4o-mini":        return (input:  0.15, output:  0.60)
+        case "gpt-4o":             return (input: 2.50, output: 10.00)
+        case "gpt-4o-mini":        return (input: 0.15, output: 0.60)
         case "o3":                 return (input: 10.00, output: 40.00)
-        case "o4-mini":            return (input:  1.10, output:  4.40)
-        default:                   return (input:  2.50, output: 10.00)
+        case "o4-mini":            return (input: 1.10, output: 4.40)
+        default:                   return (input: 2.50, output: 10.00)
         }
     }
 
@@ -40,10 +40,10 @@ enum ModelPriceTable {
 
     static func google(modelID: String) -> (input: Double, output: Double) {
         switch modelID {
-        case "gemini-2.5-pro":     return (input:  1.25, output: 10.00)
-        case "gemini-2.5-flash":   return (input:  0.075, output: 0.30)
-        case "gemini-2.0-flash":   return (input:  0.10, output:  0.40)
-        default:                   return (input:  1.25, output: 10.00)
+        case "gemini-2.5-pro":     return (input: 1.25, output: 10.00)
+        case "gemini-2.5-flash":   return (input: 0.075, output: 0.30)
+        case "gemini-2.0-flash":   return (input: 0.10, output: 0.40)
+        default:                   return (input: 1.25, output: 10.00)
         }
     }
 

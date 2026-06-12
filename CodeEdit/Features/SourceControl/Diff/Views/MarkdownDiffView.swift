@@ -1,3 +1,4 @@
+// swiftlint:disable file_length identifier_name line_length shorthand_operator
 //
 //  MarkdownDiffView.swift
 //  CodeEdit

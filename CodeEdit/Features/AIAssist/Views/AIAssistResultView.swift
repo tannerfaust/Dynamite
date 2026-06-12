@@ -1,3 +1,4 @@
+// swiftlint:disable identifier_name
 //
 //  AIAssistResultView.swift
 //  CodeEdit

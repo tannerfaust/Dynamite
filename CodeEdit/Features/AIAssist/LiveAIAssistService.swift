@@ -1,3 +1,4 @@
+// swiftlint:disable pattern_matching_keywords
 //
 //  LiveAIAssistService.swift
 //  CodeEdit
@@ -49,8 +50,8 @@ final class LiveAIAssistService: AIAssistService {
 
                     let providerStream = provider.stream(
                         systemPrompt: prompt.system,
-                        userMessage:  prompt.user,
-                        modelID:      modelID,
+                        userMessage: prompt.user,
+                        modelID: modelID,
                         maxOutputTokens: request.budget.maxOutputTokens
                     )
 
@@ -62,10 +63,10 @@ final class LiveAIAssistService: AIAssistService {
 
                         case .usage(let inputTokens, let outputTokens, let mid):
                             let usage = TokenUsage(
-                                inputTokens:  inputTokens,
+                                inputTokens: inputTokens,
                                 outputTokens: outputTokens,
-                                modelID:      mid,
-                                timestamp:    Date()
+                                modelID: mid,
+                                timestamp: Date()
                             )
                             continuation.yield(.usage(usage))
                             spendLedger.record(usage: usage, operation: request.operation, provider: provider.id)

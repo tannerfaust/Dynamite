@@ -45,12 +45,12 @@ final class SpendLedger {
     func record(usage: TokenUsage, operation: AssistOperation, provider: AIProviderID) {
         let cost = ModelPriceTable.cost(usage: usage, provider: provider)
         let entry = Entry(
-            timestamp:    usage.timestamp,
-            provider:     provider,
-            operation:    operation,
-            inputTokens:  usage.inputTokens,
+            timestamp: usage.timestamp,
+            provider: provider,
+            operation: operation,
+            inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
-            costUSD:      cost
+            costUSD: cost
         )
         queue.async { [weak self] in
             guard let self else { return }

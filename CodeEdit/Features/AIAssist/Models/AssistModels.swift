@@ -170,11 +170,11 @@ struct TokenBudget {
     static func `default`(for operation: AssistOperation) -> TokenBudget {
         switch operation {
         case .draft:      return TokenBudget(maxInputTokens: 16_000, maxOutputTokens: 4_000)
-        case .refine:     return TokenBudget(maxInputTokens:  4_000, maxOutputTokens: 1_000)
+        case .refine:     return TokenBudget(maxInputTokens: 4_000, maxOutputTokens: 1_000)
         case .crossCheck: return TokenBudget(maxInputTokens: 24_000, maxOutputTokens: 2_000)
-        case .summarize:  return TokenBudget(maxInputTokens:  8_000, maxOutputTokens: 1_000)
+        case .summarize:  return TokenBudget(maxInputTokens: 8_000, maxOutputTokens: 1_000)
         case .extract:    return TokenBudget(maxInputTokens: 16_000, maxOutputTokens: 2_000)
-        case .narrate:    return TokenBudget(maxInputTokens:  4_000, maxOutputTokens:   500)
+        case .narrate:    return TokenBudget(maxInputTokens: 4_000, maxOutputTokens: 500)
         }
     }
 }

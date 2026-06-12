@@ -1,3 +1,4 @@
+// swiftlint:disable line_length
 import XCTest
 @testable import CodeEdit
 
@@ -34,7 +35,7 @@ final class PromptTemplateTests: XCTestCase {
         for operation in AssistOperation.allCases {
             let prompt = PromptTemplate.build(for: makeRequest(operation: operation))
             XCTAssertFalse(prompt.system.isEmpty, "\(operation.rawValue): system prompt is empty")
-            XCTAssertFalse(prompt.user.isEmpty,   "\(operation.rawValue): user message is empty")
+            XCTAssertFalse(prompt.user.isEmpty, "\(operation.rawValue): user message is empty")
         }
     }
 

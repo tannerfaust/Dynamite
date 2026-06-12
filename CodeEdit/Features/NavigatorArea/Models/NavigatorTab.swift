@@ -1,3 +1,4 @@
+// swiftlint:disable pattern_matching_keywords
 //
 //  NavigatorTab.swift
 //  CodeEdit

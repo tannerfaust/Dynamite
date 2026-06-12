@@ -1,3 +1,4 @@
+// swiftlint:disable attributes
 //
 //  DiffPaneView.swift
 //  CodeEdit

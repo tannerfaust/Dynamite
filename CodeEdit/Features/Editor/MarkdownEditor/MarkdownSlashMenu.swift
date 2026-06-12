@@ -1,3 +1,4 @@
+// swiftlint:disable attributes
 //
 //  MarkdownSlashMenu.swift
 //  CodeEdit

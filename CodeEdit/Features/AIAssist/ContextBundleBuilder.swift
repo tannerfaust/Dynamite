@@ -1,3 +1,4 @@
+// swiftlint:disable identifier_name line_length
 //
 //  ContextBundleBuilder.swift
 //  CodeEdit

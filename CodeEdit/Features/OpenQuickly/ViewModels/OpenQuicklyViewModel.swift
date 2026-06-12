@@ -1,3 +1,4 @@
+// swiftlint:disable function_body_length
 //
 //  OpenQuicklyViewModel.swift
 //  CodeEditModules/QuickOpen

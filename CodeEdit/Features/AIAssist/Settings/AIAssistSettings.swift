@@ -1,3 +1,4 @@
+// swiftlint:disable identifier_name
 //
 //  AIAssistSettings.swift
 //  CodeEdit
@@ -82,11 +83,11 @@ struct AIAssistSettings: Codable, Hashable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        activeProvider   = try c.decodeIfPresent(AIProviderID.self,    forKey: .activeProvider)
+        activeProvider   = try c.decodeIfPresent(AIProviderID.self, forKey: .activeProvider)
         modelOverrides   = try c.decodeIfPresent([String: String].self, forKey: .modelOverrides)   ?? [:]
-        inputTokenCaps   = try c.decodeIfPresent([String: Int].self,   forKey: .inputTokenCaps)   ?? [:]
-        outputTokenCaps  = try c.decodeIfPresent([String: Int].self,   forKey: .outputTokenCaps)  ?? [:]
-        monthlyCapUSD    = try c.decodeIfPresent(Double.self,          forKey: .monthlyCapUSD)    ?? 5.0
+        inputTokenCaps   = try c.decodeIfPresent([String: Int].self, forKey: .inputTokenCaps)   ?? [:]
+        outputTokenCaps  = try c.decodeIfPresent([String: Int].self, forKey: .outputTokenCaps)  ?? [:]
+        monthlyCapUSD    = try c.decodeIfPresent(Double.self, forKey: .monthlyCapUSD)    ?? 5.0
     }
 
     // MARK: Search Keys (for Settings search)

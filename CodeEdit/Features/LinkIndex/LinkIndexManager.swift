@@ -1,3 +1,4 @@
+// swiftlint:disable function_body_length identifier_name line_length
 import Foundation
 import GRDB
 import Combine

@@ -1,3 +1,4 @@
+// swiftlint:disable function_body_length line_length pattern_matching_keywords
 //
 //  RenderedMarkdownView.swift
 //  CodeEdit

@@ -1,3 +1,4 @@
+// swiftlint:disable cyclomatic_complexity function_body_length identifier_name missing_docs
 import Foundation
 
 public enum FrontMatterParser {

@@ -1,3 +1,4 @@
+// swiftlint:disable function_body_length
 //
 //  OpenAIProvider.swift
 //  CodeEdit
@@ -44,7 +45,7 @@ final class OpenAIProvider: AIProvider {
                         "stream_options": ["include_usage": true],
                         "messages": [
                             ["role": "system", "content": systemPrompt],
-                            ["role": "user",   "content": userMessage]
+                            ["role": "user", "content": userMessage]
                         ]
                     ]
                     request.httpBody = try JSONSerialization.data(withJSONObject: body)

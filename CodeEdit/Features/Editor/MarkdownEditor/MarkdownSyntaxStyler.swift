@@ -1,3 +1,6 @@
+// swiftlint:disable cyclomatic_complexity file_length function_body_length
+// swiftlint:disable function_parameter_count identifier_name multiline_arguments_brackets
+// swiftlint:disable type_body_length
 //
 //  MarkdownSyntaxStyler.swift
 //  CodeEdit

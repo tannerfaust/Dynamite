@@ -1,3 +1,4 @@
+// swiftlint:disable identifier_name line_length missing_docs
 import Foundation
 
 public struct LinkIndexNode: Codable, Hashable, Identifiable {

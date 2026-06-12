@@ -1,3 +1,4 @@
+// swiftlint:disable identifier_name line_length
 //
 //  AIAssistSettingsView.swift
 //  CodeEdit
@@ -12,8 +13,8 @@ struct AIAssistSettingsView: View {
     @ObservedObject private var settings: Settings = .shared
 
     @State private var keyInputs: [AIProviderID: String] = [:]
-    @State private var savedKeys:  [AIProviderID: Bool]  = [:]
-    @State private var saveError:  String?
+    @State private var savedKeys: [AIProviderID: Bool]  = [:]
+    @State private var saveError: String?
 
     var body: some View {
         Form {

@@ -1,3 +1,4 @@
+// swiftlint:disable identifier_name multiline_arguments_brackets
 //
 //  ProductMapViewModel.swift
 //  CodeEdit

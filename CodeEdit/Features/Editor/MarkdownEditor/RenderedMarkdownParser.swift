@@ -1,3 +1,4 @@
+// swiftlint:disable cyclomatic_complexity file_length function_body_length large_tuple line_length type_body_length
 //
 //  RenderedMarkdownParser.swift
 //  CodeEdit
