@@ -8,7 +8,7 @@ import AppKit
 
 /// SwiftUI bridge for `MarkdownTextView` using a `@Binding<String>` for the body text.
 ///
-/// Unlike `MarkdownEditorView` (which requires `CodeFileDocument`), this view is
+/// Unlike `MarkdownPreviewView` (which requires `CodeFileDocument`), this view is
 /// self-contained — appropriate for the Cockpit artifact editor where no IDE panes exist.
 /// Uses the same live WYSIWYG `MarkdownTextView` component under the hood.
 struct ArtifactMarkdownEditorView: NSViewRepresentable {
@@ -29,7 +29,25 @@ struct ArtifactMarkdownEditorView: NSViewRepresentable {
             coord?.handleEdit(textView: textView)
         }
         context.coordinator.textView = textView
+        context.coordinator.appliedTheme = theme
         scroll.documentView = textView
+
+        context.coordinator.frameObserver = NotificationCenter.default.addObserver(
+            forName: NSView.frameDidChangeNotification,
+            object: scroll.contentView,
+            queue: .main
+        ) { [weak textView] _ in
+            guard let textView, let clipView = textView.enclosingScrollView?.contentView else { return }
+            let newWidth = clipView.bounds.width
+            if abs(textView.frame.width - newWidth) > 1 {
+                textView.frame.size.width = newWidth
+                textView.textContainer?.size = NSSize(
+                    width: newWidth,
+                    height: CGFloat.greatestFiniteMagnitude
+                )
+            }
+        }
+        scroll.contentView.postsFrameChangedNotifications = true
         return scroll
     }
 
@@ -54,9 +72,16 @@ struct ArtifactMarkdownEditorView: NSViewRepresentable {
         var binding: Binding<String>
         weak var textView: MarkdownTextView?
         var appliedTheme: MarkdownTheme?
+        var frameObserver: NSObjectProtocol?
         var isSyncing = false
 
         init(binding: Binding<String>) { self.binding = binding }
+
+        deinit {
+            if let frameObserver {
+                NotificationCenter.default.removeObserver(frameObserver)
+            }
+        }
 
         func handleEdit(textView: MarkdownTextView) {
             isSyncing = true

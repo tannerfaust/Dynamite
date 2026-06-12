@@ -7,6 +7,7 @@ import SwiftUI
 
 private enum ArtifactEditorMode: String, CaseIterable, Identifiable {
     case board
+    case preview
     case source
 
     var id: String { rawValue }
@@ -14,6 +15,7 @@ private enum ArtifactEditorMode: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .board:   return "Board"
+        case .preview: return "Preview"
         case .source:  return "Source"
         }
     }
@@ -36,7 +38,7 @@ struct ArtifactEditorView: View {
         self.artifact = artifact
         _draft = State(initialValue: artifact)
         let supportsBoard = artifact.kind?.supportsBoardView == true
-        _editorMode = State(initialValue: supportsBoard ? .board : .source)
+        _editorMode = State(initialValue: supportsBoard ? .board : .preview)
         _assistViewModel = StateObject(wrappedValue: viewModel.makeAssistViewModel())
     }
 
@@ -49,12 +51,21 @@ struct ArtifactEditorView: View {
             codeForeground: .systemBlue,
             codeBackground: .quaternaryLabelColor.withAlphaComponent(0.08),
             quoteColor: .secondaryLabelColor,
-            dividerColor: .separatorColor
+            quoteBackground: .quaternaryLabelColor.withAlphaComponent(0.06),
+            dividerColor: .separatorColor,
+            tableHeaderBackground: .quaternaryLabelColor.withAlphaComponent(0.08),
+            tableBorderColor: .separatorColor,
+            highlightBackground: .systemYellow.withAlphaComponent(0.32),
+            syntaxColor: .tertiaryLabelColor
         )
     }
 
     private var supportsBoard: Bool {
         draft.kind?.supportsBoardView == true
+    }
+
+    private var availableEditorModes: [ArtifactEditorMode] {
+        supportsBoard ? [.board, .preview, .source] : [.preview, .source]
     }
 
     var body: some View {
@@ -87,15 +98,14 @@ struct ArtifactEditorView: View {
 
     private var editorToolbar: some View {
         HStack {
-            if supportsBoard {
-                Picker("Editor", selection: $editorMode) {
-                    ForEach(ArtifactEditorMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
+            Picker("Editor", selection: $editorMode) {
+                ForEach(availableEditorModes) { mode in
+                    Text(mode.title).tag(mode)
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 160)
             }
+            .pickerStyle(.segmented)
+            .frame(width: supportsBoard ? 240 : 160)
+
             Spacer()
         }
         .padding(.horizontal, 24)
@@ -112,10 +122,22 @@ struct ArtifactEditorView: View {
                     viewModel.navigateToNode(link.to)
                 }
             )
-        } else {
+        } else if editorMode == .preview {
             ArtifactMarkdownEditorView(text: $draft.body, theme: theme)
                 .onChange(of: draft.body) { _, _ in scheduleSave() }
+        } else {
+            rawMarkdownSourceEditor
+                .onChange(of: draft.body) { _, _ in scheduleSave() }
         }
+    }
+
+    private var rawMarkdownSourceEditor: some View {
+        TextEditor(text: $draft.body)
+            .font(.system(.body, design: .monospaced))
+            .foregroundStyle(.primary)
+            .scrollContentBackground(.hidden)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
     }
 
     // MARK: - Save helpers
