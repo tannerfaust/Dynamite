@@ -68,6 +68,16 @@ New product-layer features (`ProductGraph`, `RepoAwareness`, `ContextEngine`, `T
 5. If you touched product scope, architecture, or conventions, update this file and the relevant doc in `Dynamite Docs/`.
 6. Build must pass and lint must be clean before you consider the task done.
 
+### Mandatory app build/run discipline
+This repo can easily produce multiple apps with the same visible name. To avoid agents testing different binaries:
+
+- Always build and launch branch work with `./script/build_and_run.sh --logs` or `./script/build_and_run.sh --verify`.
+- Do not launch Dynamite through Finder, `/Applications/Dynamite.app`, `open -a Dynamite`, or an Xcode/global DerivedData product when validating branch behavior.
+- The canonical branch app is `./.derivedData/Build/Products/Debug/Dynamite.app`, built from `./.SourcePackages`.
+- After launching, verify the running command points at `/Users/mediaalamedia/dynamite/.derivedData/Build/Products/Debug/Dynamite.app/Contents/MacOS/Dynamite`. The build script now does this verification automatically.
+- If editor behavior depends on patched Swift package checkouts, run `./scripts/apply-editor-perf-patch.sh` before building. Do not leave a direct checkout edit without updating the matching `patches/*.patch` file and the patch verifier.
+- Before investigating UI bugs, stop existing `Dynamite` processes and relaunch with the script above so stale app copies cannot mask or reintroduce fixes.
+
 ## Product principles (use these to break ties)
 1. **The product layer is the product.** The IDE and everything else supports it.
 2. **Companion, not cage.** Never own the agent's runtime; feed it via files.
