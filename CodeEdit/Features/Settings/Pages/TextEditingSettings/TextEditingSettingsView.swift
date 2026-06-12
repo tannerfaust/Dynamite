@@ -38,6 +38,12 @@ struct TextEditingSettingsView: View {
                 letterSpacing
             }
             Section {
+                markdownPreviewEnabled
+                markdownPreviewFontSelector
+                markdownPreviewFontSizeSelector
+                markdownPreviewFontWeightSelector
+            }
+            Section {
                 autocompleteBraces
                 enableTypeOverCompletion
             }
@@ -53,6 +59,10 @@ struct TextEditingSettingsView: View {
 }
 
 private extension TextEditingSettingsView {
+    @ViewBuilder private var markdownPreviewEnabled: some View {
+        Toggle("Markdown Preview", isOn: $textEditing.markdownPreviewEnabled)
+    }
+
     @ViewBuilder private var fontSelector: some View {
         MonospacedFontPicker(title: "Font", selectedFontName: $textEditing.font.name)
     }
@@ -69,6 +79,24 @@ private extension TextEditingSettingsView {
 
     @ViewBuilder private var fontWeightSelector: some View {
         FontWeightPicker(selection: $textEditing.font.weight)
+    }
+
+    @ViewBuilder private var markdownPreviewFontSelector: some View {
+        FontPicker(title: "Markdown Preview Font", selectedFontName: $textEditing.markdownPreviewFont.name)
+    }
+
+    @ViewBuilder private var markdownPreviewFontSizeSelector: some View {
+        Stepper(
+            "Markdown Preview Font Size",
+            value: $textEditing.markdownPreviewFont.size,
+            in: 8...48,
+            step: 1,
+            format: .number
+        )
+    }
+
+    @ViewBuilder private var markdownPreviewFontWeightSelector: some View {
+        FontWeightPicker(selection: $textEditing.markdownPreviewFont.weight, label: "Markdown Preview Font Weight")
     }
 
     @ViewBuilder private var autocompleteBraces: some View {

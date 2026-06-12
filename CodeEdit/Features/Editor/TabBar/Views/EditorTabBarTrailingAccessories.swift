@@ -12,6 +12,8 @@ struct EditorTabBarTrailingAccessories: View {
     var wrapLinesToEditorWidth
     @AppSettings(\.textEditing.showMinimap)
     var showMinimap
+    @AppSettings(\.textEditing.markdownPreviewEnabled)
+    var markdownPreviewEnabled
 
     @Environment(\.splitEditor)
     var splitEditor
@@ -56,10 +58,7 @@ struct EditorTabBarTrailingAccessories: View {
                     if codeFile.isMarkdown {
                         Toggle(
                             "Markdown Preview",
-                            isOn: Binding(
-                                get: { [weak codeFile] in codeFile?.markdownPreview ?? false },
-                                set: { [weak codeFile] in codeFile?.markdownPreview = $0 }
-                            )
+                            isOn: $markdownPreviewEnabled
                         )
                         .keyboardShortcut("R", modifiers: [.command, .shift])
                         Divider()

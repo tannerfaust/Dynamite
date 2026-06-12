@@ -35,6 +35,10 @@ struct CodeFileView: View {
     var overscroll
     @AppSettings(\.textEditing.font)
     var settingsFont
+    @AppSettings(\.textEditing.markdownPreviewFont)
+    var markdownPreviewFont
+    @AppSettings(\.textEditing.markdownPreviewEnabled)
+    var markdownPreviewEnabled
     @AppSettings(\.theme.useThemeBackground)
     var useThemeBackground
     @AppSettings(\.theme.matchAppearance)
@@ -109,19 +113,20 @@ struct CodeFileView: View {
     }
 
     @State private var font: NSFont = Settings[\.textEditing].font.current
+    @State private var markdownFont: NSFont = Settings[\.textEditing].markdownPreviewFont.current
 
     @Environment(\.edgeInsets)
     private var edgeInsets
 
     private var markdownTheme: MarkdownTheme {
-        MarkdownTheme.from(editor: currentTheme.editor, baseFont: font)
+        MarkdownTheme.from(editor: currentTheme.editor, baseFont: markdownFont)
     }
 
     @ViewBuilder
     var body: some View {
         Group {
-            if isEditable, codeFile.isMarkdown, codeFile.markdownPreview == true {
-                MarkdownEditorView(codeFile: codeFile, theme: markdownTheme)
+            if codeFile.isMarkdown, markdownPreviewEnabled {
+                MarkdownPreviewView(codeFile: codeFile, theme: markdownTheme)
             } else {
                 sourceEditor
             }
@@ -134,6 +139,9 @@ struct CodeFileView: View {
         .frame(minHeight: .zero, maxHeight: .infinity)
         .onChange(of: settingsFont) { _, newFontSetting in
             font = newFontSetting.current
+        }
+        .onChange(of: markdownPreviewFont) { _, newFontSetting in
+            markdownFont = newFontSetting.current
         }
     }
 
