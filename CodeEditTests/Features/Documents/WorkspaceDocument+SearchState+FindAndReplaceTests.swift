@@ -9,7 +9,7 @@ import XCTest
 @testable import CodeEdit
 
 @MainActor
-final class FindAndReplaceTests: XCTestCase { // swiftlint:disable:this type_body_length
+final class FindAndReplaceTests: XCTestCase {
     private var directory: URL!
     private var files: [CEWorkspaceFile] = []
     private var mockWorkspace: WorkspaceDocument!
