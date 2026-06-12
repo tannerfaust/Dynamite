@@ -23,19 +23,10 @@ final class FindAndReplaceTests: XCTestCase { // swiftlint:disable:this type_bod
     /// 3 mock files are added to the index
     /// which will be removed in the teardown function
     override func setUp() async throws {
-        directory = try FileManager.default.url(
-            for: .developerApplicationDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        .appending(path: "CodeEdit", directoryHint: .isDirectory)
-        .appending(path: "WorkspaceClientTests", directoryHint: .isDirectory)
+        directory = FileManager.default.temporaryDirectory
+            .appending(path: "WorkspaceClientTests-\(UUID().uuidString)", directoryHint: .isDirectory)
         try? FileManager.default.removeItem(at: directory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-
-        mockWorkspace = try WorkspaceDocument(for: directory, withContentsOf: directory, ofType: "")
-        searchState = mockWorkspace.searchState
 
         // Add a few files
         let folder1 = directory.appending(path: "Folder 2")
@@ -64,7 +55,8 @@ final class FindAndReplaceTests: XCTestCase { // swiftlint:disable:this type_bod
         files[1].parent = folder1File
         files[2].parent = folder2File
 
-        mockWorkspace.searchState?.addProjectToIndex()
+        mockWorkspace = try WorkspaceDocument(for: directory, withContentsOf: directory, ofType: "")
+        searchState = mockWorkspace.searchState
 
         // NOTE: This is a temporary solution. In the future, a file watcher should track file updates
         // and trigger an index update.
