@@ -142,8 +142,12 @@ class CEActiveTask: ObservableObject, Identifiable, Hashable {
 
     @MainActor
     func clearOutput() {
+        guard status == .running || status == .stopped else {
+            output = CEActiveTaskTerminalView(activeTask: self)
+            return
+        }
+
         output?.terminal.resetToInitialState()
-        output?.feed(text: "")
     }
 
     private func createStatusTaskNotification() {

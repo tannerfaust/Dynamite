@@ -17,7 +17,7 @@ class CEActiveTaskTests {
     init() {
         task = CETask(
             name: "Test Task",
-            command: "echo $STATE",
+            command: "echo Testing",
             environmentVariables: [CETask.EnvironmentVariable(key: "STATE", value: "Testing")]
         )
         activeTask = CEActiveTask(task: task)
