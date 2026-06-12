@@ -1,4 +1,3 @@
-// swiftlint:disable pattern_matching_keywords
 //
 //  InspectorTab.swift
 //  CodeEdit
@@ -33,7 +32,7 @@ enum InspectorTab: WorkspacePanelTab {
     }
 
     var id: String {
-        if case .uiExtension(let endpoint, let data) = self {
+        if case let .uiExtension(endpoint, data) = self {
             return endpoint.bundleIdentifier + data.sceneID
         }
         return title

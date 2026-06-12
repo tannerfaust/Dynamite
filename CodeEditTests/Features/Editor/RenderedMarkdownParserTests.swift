@@ -1,4 +1,3 @@
-// swiftlint:disable pattern_matching_keywords
 import XCTest
 @testable import CodeEdit
 
@@ -75,7 +74,7 @@ final class RenderedMarkdownParserTests: XCTestCase {
         }
         XCTAssertEqual(unorderedItems.map { $0.taskState }, [nil, .checked, .unchecked])
 
-        guard case .orderedList(let start, let orderedItems) = document.blocks[2] else {
+        guard case let .orderedList(start, orderedItems) = document.blocks[2] else {
             return XCTFail("Expected ordered list.")
         }
         XCTAssertEqual(start, 3)
@@ -85,7 +84,7 @@ final class RenderedMarkdownParserTests: XCTestCase {
             return XCTFail("Expected horizontal rule.")
         }
 
-        guard case .codeBlock(let language, let code) = document.blocks[4] else {
+        guard case let .codeBlock(language, code) = document.blocks[4] else {
             return XCTFail("Expected code block.")
         }
         XCTAssertEqual(language, "swift")
@@ -102,7 +101,7 @@ final class RenderedMarkdownParserTests: XCTestCase {
             """
         )
 
-        guard case .heading(let level, let headingInlines) = document.blocks[0] else {
+        guard case let .heading(level, headingInlines) = document.blocks[0] else {
             return XCTFail("Expected setext heading.")
         }
         XCTAssertEqual(level, 1)
