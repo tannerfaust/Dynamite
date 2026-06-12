@@ -31,7 +31,7 @@ build_app() {
 }
 
 open_app() {
-  "$APP_BUNDLE/Contents/MacOS/$APP_NAME" &
+  /usr/bin/open -n "$APP_BUNDLE" --args "$ROOT_DIR"
 }
 
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
@@ -54,7 +54,7 @@ case "$MODE" in
     ;;
   --verify|verify)
     open_app
-    sleep 2
+    sleep 3
     pgrep -x "$APP_NAME" >/dev/null
     ;;
   *)
