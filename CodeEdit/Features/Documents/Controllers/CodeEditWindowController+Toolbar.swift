@@ -40,10 +40,7 @@ extension CodeEditWindowController {
             .flexibleSpace,
         ]
 
-        items += [
-            .stopTaskSidebarItem,
-            .startTaskSidebarItem,
-        ]
+        items += [.taskSidebarItem]
 
         items += [
             .sidebarTrackingSeparator,
@@ -92,6 +89,7 @@ extension CodeEditWindowController {
         }
 
         items += [
+            .taskSidebarItem,
             .startTaskSidebarItem,
             .stopTaskSidebarItem,
         ]
@@ -177,17 +175,32 @@ extension CodeEditWindowController {
             return notificationItem()
         case .viewModeSwitcher:
             return viewModeSwitcherItem()
+        case .taskSidebarItem:
+            return taskSidebarMenuItem()
         default:
             return NSToolbarItem(itemIdentifier: itemIdentifier)
         }
     }
 
-    private func stopTaskSidebarItem() -> NSToolbarItem? {
-        if #available(macOS 26, *) {
-            guard let workspace else { return nil }
-            return StopTaskToolbarItem(workspace: workspace)
-        }
+    private func taskSidebarMenuItem() -> NSToolbarItem? {
+        let toolbarItem = NSToolbarItem(itemIdentifier: .taskSidebarItem)
+        toolbarItem.visibilityPriority = .high
+        toolbarItem.toolTip = "Run or stop the selected task"
 
+        guard let workspace, let taskManager = workspace.taskManager else { return nil }
+
+        let view = NSHostingView(
+            rootView: TaskToolbarMenuButton(taskManager: taskManager)
+                .environmentObject(workspace)
+        )
+        toolbarItem.view = view
+        if #available(macOS 26, *) {
+            toolbarItem.isBordered = true
+        }
+        return toolbarItem
+    }
+
+    private func stopTaskSidebarItem() -> NSToolbarItem? {
         let toolbarItem = NSToolbarItem(itemIdentifier: NSToolbarItem.Identifier.stopTaskSidebarItem)
 
         guard let taskManager = workspace?.taskManager else { return nil }
@@ -201,11 +214,6 @@ extension CodeEditWindowController {
     }
 
     private func startTaskSidebarItem() -> NSToolbarItem? {
-        if #available(macOS 26, *) {
-            guard let workspace else { return nil }
-            return StartTaskToolbarItem(workspace: workspace)
-        }
-
         let toolbarItem = NSToolbarItem(itemIdentifier: NSToolbarItem.Identifier.startTaskSidebarItem)
 
         guard let taskManager = workspace?.taskManager else { return nil }
