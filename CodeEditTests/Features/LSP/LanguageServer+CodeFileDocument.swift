@@ -44,6 +44,10 @@ final class LanguageServerCodeFileDocumentTests: XCTestCase {
 
     override func tearDown() {
         do {
+            let documents = CodeEditDocumentController.shared.documents
+            for document in documents {
+                CodeEditDocumentController.shared.removeDocument(document)
+            }
             try FileManager.default.removeItem(at: tempTestDir)
         } catch {
             XCTFail(error.localizedDescription)
@@ -88,18 +92,18 @@ final class LanguageServerCodeFileDocumentTests: XCTestCase {
         return (workspace, fileManager)
     }
 
+    func makeSwiftFile(in fileManager: CEWorkspaceFileManager) throws -> CEWorkspaceFile? {
+        let fileURL = tempTestDir.appending(path: "example.swift")
+        try "let value = 1\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        return fileManager.getFile(fileURL.path, createIfNotFound: true)
+    }
+
     func openCodeFile(
         for server: LanguageServerType,
         connection: BufferingServerConnection,
-        file: CEWorkspaceFile,
+        codeFile: CodeFileDocument,
         syncOption: TwoTypeOption<TextDocumentSyncOptions, TextDocumentSyncKind>?
     ) async throws -> CodeFileDocument {
-        let codeFile = try await CodeFileDocument(
-            for: file.url,
-            withContentsOf: file.url,
-            ofType: "public.swift-source"
-        )
-
         // This is usually sent from the LSPService
         try await server.openDocument(codeFile)
 
@@ -124,50 +128,52 @@ final class LanguageServerCodeFileDocumentTests: XCTestCase {
         connection: BufferingServerConnection,
         description: String
     ) async {
-        let expectation = expectation(description: description)
+        func matches(_ events: ([ClientRequest], [ClientNotification])) -> Bool {
+            events.0.map(\.method) == expectedValue.0 && events.1.map(\.method) == expectedValue.1
+        }
 
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask { await self.fulfillment(of: [expectation], timeout: 2) }
-            group.addTask {
-                for await events in connection.clientEventSequence
-                where events.0.map(\.method) == expectedValue.0 && events.1.map(\.method) == expectedValue.1 {
-                    expectation.fulfill()
-                    return
-                }
+        if matches((connection.clientRequests, connection.clientNotifications)) {
+            return
+        }
+
+        let expectation = expectation(description: description)
+        let listener = Task {
+            for await events in connection.clientEventSequence
+            where matches(events) {
+                expectation.fulfill()
+                return
             }
         }
+        await fulfillment(of: [expectation], timeout: 2)
+        listener.cancel()
     }
 
     // MARK: - Open Close
 
     @MainActor
     func testOpenCloseFileNotifications() async throws {
-        // Set up test server
-        let (connection, server) = try await makeTestServer()
-
-        // This service should receive the didOpen/didClose notifications
-        let lspService = ServiceContainer.resolve(.singleton, LSPService.self)
-        await MainActor.run { lspService?.languageClients[.init(.swift, tempTestDir.path() + "/")] = server }
-
         // Set up workspace
         let (workspace, fileManager) = try makeTestWorkspace()
         CodeEditDocumentController.shared.addDocument(workspace)
 
         // Add a CEWorkspaceFile
-        _ = try fileManager.addFile(fileName: "example", toFile: fileManager.workspaceItem, useExtension: "swift")
-        guard let file = fileManager.childrenOfFile(fileManager.workspaceItem)?.first else {
+        guard let file = try makeSwiftFile(in: fileManager) else {
             XCTFail("No File")
             return
         }
 
         // Create a CodeFileDocument to test with, attach it to the workspace and file
-        let codeFile = try CodeFileDocument(
-            for: file.url,
-            withContentsOf: file.url,
-            ofType: "public.swift-source"
-        )
+        let codeFile = try CodeFileDocument(contentsOf: file.url, ofType: "public.swift-source")
         file.fileDocument = codeFile
         CodeEditDocumentController.shared.addDocument(codeFile)
+
+        // Set up test server
+        let (connection, server) = try await makeTestServer()
+
+        // This service should receive the didOpen/didClose notifications.
+        let lspService = ServiceContainer.resolve(.singleton, LSPService.self)
+        await MainActor.run { lspService?.languageClients[.init(.swift, tempTestDir.path() + "/")] = server }
+        NotificationCenter.default.post(name: CodeFileDocument.didOpenNotification, object: codeFile)
 
         await waitForClientState(
             (
@@ -215,8 +221,7 @@ final class LanguageServerCodeFileDocumentTests: XCTestCase {
         let (_, fileManager) = try makeTestWorkspace()
 
         // Make our example file
-        _ = try fileManager.addFile(fileName: "example", toFile: fileManager.workspaceItem, useExtension: "swift")
-        guard let file = fileManager.childrenOfFile(fileManager.workspaceItem)?.first else {
+        guard let file = try makeSwiftFile(in: fileManager) else {
             XCTFail("No File")
             return
         }
@@ -228,13 +233,14 @@ final class LanguageServerCodeFileDocumentTests: XCTestCase {
         ]
 
         for option in syncOptions {
+            let codeFile = try CodeFileDocument(contentsOf: file.url, ofType: "public.swift-source")
             // Set up test server
             let (connection, server) = try await makeTestServer()
             // Create a CodeFileDocument to test with, attach it to the workspace and file
-            let codeFile = try await openCodeFile(for: server, connection: connection, file: file, syncOption: option)
+            _ = try await openCodeFile(for: server, connection: connection, codeFile: codeFile, syncOption: option)
             XCTAssertNotNil(codeFile.languageServerObjects.textCoordinator.languageServer)
             codeFile.languageServerObjects.textCoordinator.setUpUpdatesTask()
-            codeFile.content?.replaceString(in: .zero, with: #"func testFunction() -> String { "Hello " }"#)
+            codeFile.content?.mutableString.setString(#"func testFunction() -> String { "Hello " }"#)
 
             let textView = TextView(string: "")
             textView.setTextStorage(codeFile.content!)
@@ -274,8 +280,7 @@ final class LanguageServerCodeFileDocumentTests: XCTestCase {
         let (_, fileManager) = try makeTestWorkspace()
 
         // Make our example file
-        _ = try fileManager.addFile(fileName: "example", toFile: fileManager.workspaceItem, useExtension: "swift")
-        guard let file = fileManager.childrenOfFile(fileManager.workspaceItem)?.first else {
+        guard let file = try makeSwiftFile(in: fileManager) else {
             XCTFail("No File")
             return
         }
@@ -286,13 +291,14 @@ final class LanguageServerCodeFileDocumentTests: XCTestCase {
         ]
 
         for option in syncOptions {
+            let codeFile = try CodeFileDocument(contentsOf: file.url, ofType: "public.swift-source")
             // Set up test server
             let (connection, server) = try await makeTestServer()
-            let codeFile = try await openCodeFile(for: server, connection: connection, file: file, syncOption: option)
+            _ = try await openCodeFile(for: server, connection: connection, codeFile: codeFile, syncOption: option)
 
             XCTAssertNotNil(codeFile.languageServerObjects.textCoordinator.languageServer)
             codeFile.languageServerObjects.textCoordinator.setUpUpdatesTask()
-            codeFile.content?.replaceString(in: .zero, with: #"func testFunction() -> String { "Hello " }"#)
+            codeFile.content?.mutableString.setString(#"func testFunction() -> String { "Hello " }"#)
 
             let textView = TextView(string: "")
             textView.setTextStorage(codeFile.content!)
