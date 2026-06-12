@@ -4,7 +4,7 @@
 
 ## What Dynamite is
 Dynamite is a native macOS **product ownership cockpit** built on a fork of [CodeEdit](https://github.com/CodeEditApp/CodeEdit) (Swift / SwiftUI / AppKit): a product platform where product builders and product owners run discovery, strategy, planning, and customer development — grounded in the product's actual repo — and where that living knowledge compiles into the context external AI agents read.
-
+- [x]
 **Positioning in one line:** Dynamite works *beside* agents (Claude, Codex, Cursor), never nests or orchestrates them. It is NOT an agent orchestrator and does not compete with Conductor/Intent. The IDE inside is a fast native bonus, not the product; agents may optionally appear in-app via an extension surface only.
 
 **The wedge (do not lose sight of this):** the **Product Graph** — 23 typed artifact kinds (catalog: `Dynamite Docs/decisions/ADR-0001-schema.md`) across discovery/strategy (personas, VPC, BMC, Lean Canvas, journeys, story maps, opportunity solution trees, competitor cards), planning (PRDs/specs/ADRs/OKRs/experiments), evidence (interviews/feedback/insights/assumptions), and GTM, each with AI Assist — made **repo-aware** (Repo X-Ray, Ask the Product, Reality Diff: a non-coder can see and query what the code actually does) and compiled into agent instruction files (canonical `AGENTS.md` + `CLAUDE.md` shim + per-folder context + Briefing Packs). That graph↔repo↔context link system is the moat. The product layer must work standalone — no editor pane, even no repo.
