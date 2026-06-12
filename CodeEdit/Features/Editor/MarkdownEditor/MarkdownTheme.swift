@@ -8,13 +8,6 @@
 
 import AppKit
 
-extension NSAttributedString.Key {
-    /// Marks a character range as a markdown syntax marker (e.g. `#`, `**`, the URL part of a
-    /// link) that should be hidden when the cursor is not on that line. Read by
-    /// ``ConcealableLayoutManager`` to give those glyphs zero width.
-    static let markdownConceal = NSAttributedString.Key("CEMarkdownConceal")
-}
-
 /// Colors and fonts used to render markdown in the live editor.
 struct MarkdownTheme: Equatable {
     var baseFont: NSFont
@@ -26,11 +19,31 @@ struct MarkdownTheme: Equatable {
     var codeForeground: NSColor
     var codeBackground: NSColor
     var quoteColor: NSColor
+    var quoteBackground: NSColor
     var dividerColor: NSColor
+    var tableHeaderBackground: NSColor
+    var tableBorderColor: NSColor
+    var highlightBackground: NSColor
+    var syntaxColor: NSColor
 
     var codeFont: NSFont {
         let size = baseFont.pointSize
         return NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+    }
+
+    var lineHeightMultiple: CGFloat {
+        1.35
+    }
+
+    var paragraphSpacing: CGFloat {
+        max(4, baseFont.pointSize * 0.35)
+    }
+
+    var baseParagraphStyle: NSParagraphStyle {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineHeightMultiple = lineHeightMultiple
+        paragraph.paragraphSpacing = paragraphSpacing
+        return paragraph
     }
 
     /// Font for an ATX heading of the given level (1...6).
@@ -66,9 +79,14 @@ struct MarkdownTheme: Equatable {
             secondaryColor: text.withAlphaComponent(0.45),
             accentColor: editor.keywords.nsColor,
             codeForeground: editor.strings.nsColor,
-            codeBackground: text.withAlphaComponent(0.07),
+            codeBackground: text.withAlphaComponent(0.08),
             quoteColor: text.withAlphaComponent(0.6),
-            dividerColor: text.withAlphaComponent(0.25)
+            quoteBackground: text.withAlphaComponent(0.045),
+            dividerColor: text.withAlphaComponent(0.25),
+            tableHeaderBackground: text.withAlphaComponent(0.06),
+            tableBorderColor: text.withAlphaComponent(0.18),
+            highlightBackground: NSColor.systemYellow.withAlphaComponent(0.32),
+            syntaxColor: text.withAlphaComponent(0.28)
         )
     }
 }
