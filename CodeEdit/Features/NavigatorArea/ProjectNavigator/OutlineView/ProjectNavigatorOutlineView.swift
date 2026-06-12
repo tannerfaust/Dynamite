@@ -55,8 +55,19 @@ struct ProjectNavigatorOutlineView: NSViewControllerRepresentable {
                     guard let fileItem else {
                         return
                     }
-                    self?.controller?.reveal(fileItem)
+                    if workspace.listenerModel.fileItemPendingCreationRename?.id != fileItem.id {
+                        self?.controller?.reveal(fileItem)
+                    }
                 })
+                .store(in: &cancellables)
+            workspace.listenerModel.$fileItemPendingCreationRename
+                .compactMap { $0 }
+                .sink { [weak self] fileItem in
+                    self?.controller?.reveal(fileItem)
+                    DispatchQueue.main.async {
+                        self?.controller?.beginRenaming(fileItem)
+                    }
+                }
                 .store(in: &cancellables)
             workspace.editorManager?.tabBarTabIdSubject
                 .sink { [weak self] editorInstance in

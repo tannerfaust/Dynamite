@@ -22,22 +22,24 @@ struct NavigateCommands: Commands {
                 }
                 .keyboardShortcut("j", modifiers: [.shift, .command])
 
-                Button("Reveal Changes in Navigator") {
+                if FeatureFlags.navigateStubItems {
+                    Button("Reveal Changes in Navigator") {
 
+                    }
+                    .keyboardShortcut("m", modifiers: [.shift, .command])
+                    .disabled(true)
+
+                    Button("Open in Next Editor") {
+
+                    }
+                    .keyboardShortcut(",", modifiers: [.option, .command])
+                    .disabled(true)
+
+                    Button("Open in...") {
+
+                    }
+                    .disabled(true)
                 }
-                .keyboardShortcut("m", modifiers: [.shift, .command])
-                .disabled(true)
-
-                Button("Open in Next Editor") {
-
-                }
-                .keyboardShortcut(",", modifiers: [.option, .command])
-                .disabled(true)
-
-                Button("Open in...") {
-
-                }
-                .disabled(true)
 
                 Divider()
 

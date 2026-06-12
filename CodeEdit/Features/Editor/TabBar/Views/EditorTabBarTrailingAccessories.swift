@@ -12,6 +12,8 @@ struct EditorTabBarTrailingAccessories: View {
     var wrapLinesToEditorWidth
     @AppSettings(\.textEditing.showMinimap)
     var showMinimap
+    @AppSettings(\.textEditing.markdownPreviewEnabled)
+    var markdownPreviewEnabled
 
     @Environment(\.splitEditor)
     var splitEditor
@@ -53,6 +55,15 @@ struct EditorTabBarTrailingAccessories: View {
         Button(action: {}, label: { Image(systemName: "slider.horizontal.3") })
             .overlay {
                 Menu {
+                    if codeFile.isMarkdown {
+                        Button(markdownPreviewEnabled ? "Hide Markdown Preview" : "Show Markdown Preview") {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(1)) {
+                                Settings[\.textEditing].markdownPreviewEnabled.toggle()
+                            }
+                        }
+                        .keyboardShortcut("R", modifiers: [.command, .shift])
+                        Divider()
+                    }
                     Toggle("Show Minimap", isOn: $showMinimap)
                         .keyboardShortcut("M", modifiers: [.command, .shift, .control])
                     Divider()

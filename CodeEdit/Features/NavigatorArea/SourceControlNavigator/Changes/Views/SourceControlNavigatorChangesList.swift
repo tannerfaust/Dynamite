@@ -13,6 +13,7 @@ struct SourceControlNavigatorChangesList: View {
     @EnvironmentObject var sourceControlManager: SourceControlManager
 
     @State var selection = Set<GitChangedFile>()
+    @State private var diffSource: DiffSource?
 
     var body: some View {
         List($sourceControlManager.changedFiles, selection: $selection) { $file in
@@ -28,6 +29,10 @@ struct SourceControlNavigatorChangesList: View {
                 if selectedFiles.count == 1,
                    let file = selectedFiles.first {
                     Group {
+                        Button("View Diff") {
+                            openDiff(file)
+                        }
+                        Divider()
                         Button("View in Finder") {
                             NSWorkspace.shared.activateFileViewerSelecting([file.fileURL.absoluteURL])
                         }
@@ -55,11 +60,11 @@ struct SourceControlNavigatorChangesList: View {
                     EmptyView()
                 }
             },
-            // double-click action
+            // double-click opens diff
             primaryAction: { selectedFiles in
                 if selectedFiles.count == 1,
                    let file = selectedFiles.first {
-                    openGitFile(file)
+                    openDiff(file)
                 }
             }
         )
@@ -68,6 +73,9 @@ struct SourceControlNavigatorChangesList: View {
                let file = newSelection.first {
                 openGitFile(file)
             }
+        }
+        .sheet(item: $diffSource) { item in
+            DiffPaneView(source: item.source, gitClient: item.gitClient)
         }
     }
 
@@ -78,5 +86,12 @@ struct SourceControlNavigatorChangesList: View {
         DispatchQueue.main.async {
             workspace.editorManager?.openTab(item: ceFile, asTemporary: true)
         }
+    }
+
+    private func openDiff(_ file: GitChangedFile) {
+        diffSource = DiffSource(
+            source: .workingTree(file: file, staged: file.isStaged),
+            gitClient: sourceControlManager.gitClient
+        )
     }
 }

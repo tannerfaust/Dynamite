@@ -36,6 +36,7 @@ struct GeneralSettingsView: View {
         SettingsForm {
             Section {
                 appearance
+                appAccent
                 fileIconStyle
                 showEditorJumpBar
                 dimEditorsWithoutFocus
@@ -88,6 +89,18 @@ private extension GeneralSettingsView {
         }
         .onChange(of: settings.appAppearance) { _, tag in
             tag.applyAppearance()
+        }
+    }
+
+    var appAccent: some View {
+        Picker("Accent Color Theme", selection: $settings.appAccent) {
+            ForEach(SettingsData.AppAccentTheme.allCases, id: \.self) { theme in
+                Text(theme.label)
+                    .tag(theme)
+            }
+        }
+        .onChange(of: settings.appAccent) { _, newTheme in
+            ThemeModel.shared.updateThemeForAccent(newTheme)
         }
     }
 

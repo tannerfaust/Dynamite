@@ -121,7 +121,7 @@ extension NSToolbarItem.Identifier {
     static let branchPicker: NSToolbarItem.Identifier = NSToolbarItem.Identifier("BranchPicker")
     static let activityViewer: NSToolbarItem.Identifier = NSToolbarItem.Identifier("ActivityViewer")
     static let notificationItem = NSToolbarItem.Identifier("notificationItem")
-
     static let taskSidebarItem: NSToolbarItem.Identifier = NSToolbarItem.Identifier("TaskSidebarItem")
-    static let toggleAIChat: NSToolbarItem.Identifier = NSToolbarItem.Identifier("ToggleAIChat")
+    /// Cockpit ↔ IDE segmented control (Phase B; only present when `FeatureFlags.cockpitView`).
+    static let viewModeSwitcher = NSToolbarItem.Identifier("ViewModeSwitcher")
 }

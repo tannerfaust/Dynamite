@@ -10,7 +10,7 @@
   ],
   "defaultOptions" : {
     "targetForVariableExpansion" : {
-      "containerPath" : "container:CodeEdit.xcodeproj",
+      "containerPath" : "container:Dynamite.xcodeproj",
       "identifier" : "B658FB2B27DA9E0F00EA4DBD",
       "name" : "CodeEdit"
     }
@@ -41,14 +41,14 @@
         "WelcomeModuleUnitTests\/testWelcomeActionViewLightSnapshot()"
       ],
       "target" : {
-        "containerPath" : "container:CodeEdit.xcodeproj",
+        "containerPath" : "container:Dynamite.xcodeproj",
         "identifier" : "B658FB3C27DA9E1000EA4DBD",
         "name" : "CodeEditTests"
       }
     },
     {
       "target" : {
-        "containerPath" : "container:CodeEdit.xcodeproj",
+        "containerPath" : "container:Dynamite.xcodeproj",
         "identifier" : "B658FB4627DA9E1000EA4DBD",
         "name" : "CodeEditUITests"
       }

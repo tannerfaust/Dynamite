@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 //
 //  TextEditingPreferences.swift
 //  CodeEditModules/Settings
@@ -22,6 +23,10 @@ extension SettingsData {
                 "Font",
                 "Font Size",
                 "Font Weight",
+                "Markdown Preview Font",
+                "Markdown Preview Font Size",
+                "Markdown Preview Font Weight",
+                "Markdown Preview",
                 "Line Height",
                 "Letter Spacing",
                 "Autocomplete braces",
@@ -50,6 +55,12 @@ extension SettingsData {
 
         /// The font to use in editor.
         var font: EditorFont = .init()
+
+        /// The proportional prose font to use in rendered Markdown preview/editing.
+        var markdownPreviewFont: MarkdownPreviewFont = .init()
+
+        /// Show rendered Markdown preview for markdown files instead of opening each file in source mode.
+        var markdownPreviewEnabled: Bool = false
 
         /// A flag indicating whether type-over completion is enabled
         var enableTypeOverCompletion: Bool = true
@@ -80,7 +91,12 @@ extension SettingsData {
         var showGutter: Bool = true
 
         /// Toggle the minimap in the editor.
-        var showMinimap: Bool = true
+        ///
+        /// Dynamite defaults this OFF: the minimap runs a second full text-layout engine alongside the editor
+        /// (re-typesetting on every edit/scroll) and widens the syntax-highlight range to everything it shows,
+        /// roughly doubling per-frame editor work. It also has unresolved upstream rendering/scaling-sync bugs.
+        /// Users can re-enable it in Settings → Text Editing or via the "Toggle Minimap" command.
+        var showMinimap: Bool = false
 
         /// Toggle the code folding ribbon.
         var showFoldingRibbon: Bool = true
@@ -110,6 +126,14 @@ extension SettingsData {
                 forKey: .indentOption
             ) ?? IndentOption(indentType: .spaces, spaceCount: 4)
             self.font = try container.decodeIfPresent(EditorFont.self, forKey: .font) ?? .init()
+            self.markdownPreviewFont = try container.decodeIfPresent(
+                MarkdownPreviewFont.self,
+                forKey: .markdownPreviewFont
+            ) ?? .init()
+            self.markdownPreviewEnabled = try container.decodeIfPresent(
+                Bool.self,
+                forKey: .markdownPreviewEnabled
+            ) ?? false
             self.enableTypeOverCompletion = try container.decodeIfPresent(
                 Bool.self,
                 forKey: .enableTypeOverCompletion
@@ -145,7 +169,7 @@ extension SettingsData {
             }
 
             self.showGutter = try container.decodeIfPresent(Bool.self, forKey: .showGutter) ?? true
-            self.showMinimap = try container.decodeIfPresent(Bool.self, forKey: .showMinimap) ?? true
+            self.showMinimap = try container.decodeIfPresent(Bool.self, forKey: .showMinimap) ?? false
             self.showFoldingRibbon = try container.decodeIfPresent(Bool.self, forKey: .showFoldingRibbon) ?? true
             self.reformatAtColumn = try container.decodeIfPresent(Int.self, forKey: .reformatAtColumn) ?? 80
             self.showReformattingGuide = try container.decodeIfPresent(
@@ -197,6 +221,14 @@ extension SettingsData {
 
             mgr.addCommand(name: "Toggle Minimap", title: "Toggle Minimap", id: "prefs.text_editing.toggle_minimap") {
                 Settings[\.textEditing].showMinimap.toggle()
+            }
+
+            mgr.addCommand(
+                name: "Toggle Markdown Preview",
+                title: "Toggle Markdown Preview",
+                id: "prefs.text_editing.toggle_markdown_preview"
+            ) {
+                Settings[\.textEditing].markdownPreviewEnabled.toggle()
             }
 
             mgr.addCommand(name: "Toggle Gutter", title: "Toggle Gutter", id: "prefs.text_editing.toggle_gutter") {
@@ -335,6 +367,41 @@ extension SettingsData {
         var current: NSFont {
             let customFont = NSFont(name: name, size: size)?.withWeight(weight: weight)
             return customFont ?? NSFont.monospacedSystemFont(ofSize: size, weight: .medium)
+        }
+    }
+
+    struct MarkdownPreviewFont: Codable, Hashable {
+        /// The font size for rendered Markdown body text.
+        var size: Double = 15
+
+        /// The font family name, or "System" for the current platform UI font.
+        var name: String = "System"
+
+        /// The weight of the body text.
+        var weight: NSFont.Weight = .regular
+
+        /// Default initializer
+        init() {}
+
+        /// Explicit decoder init for setting default values when key is not present in `JSON`
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.size = try container.decodeIfPresent(Double.self, forKey: .size) ?? size
+            self.name = try container.decodeIfPresent(String.self, forKey: .name) ?? name
+            self.weight = try container.decodeIfPresent(NSFont.Weight.self, forKey: .weight) ?? weight
+        }
+
+        /// Returns an NSFont representation of the current configuration.
+        ///
+        /// Returns the custom font, if enabled and able to be instantiated.
+        /// Otherwise returns the system proportional font.
+        var current: NSFont {
+            let base = if name == "System" {
+                NSFont.systemFont(ofSize: size)
+            } else {
+                NSFont(name: name, size: size) ?? NSFont.systemFont(ofSize: size)
+            }
+            return base.withWeight(weight: weight) ?? base
         }
     }
 }

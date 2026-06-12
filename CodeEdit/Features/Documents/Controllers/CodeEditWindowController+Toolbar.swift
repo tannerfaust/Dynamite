@@ -29,19 +29,18 @@ extension CodeEditWindowController {
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        var items: [NSToolbarItem.Identifier] = [
+        var items: [NSToolbarItem.Identifier] = []
+
+        if FeatureFlags.cockpitView {
+            items += [.viewModeSwitcher, .flexibleSpace]
+        }
+
+        items += [
             .toggleFirstSidebarItem,
             .flexibleSpace,
         ]
 
-        if #available(macOS 26, *) {
-            items += [.taskSidebarItem]
-        } else {
-            items += [
-                .stopTaskSidebarItem,
-                .startTaskSidebarItem,
-            ]
-        }
+        items += [.taskSidebarItem]
 
         items += [
             .sidebarTrackingSeparator,
@@ -67,7 +66,6 @@ extension CodeEditWindowController {
             .flexibleSpace,
             .itemListTrackingSeparator,
             .flexibleSpace,
-            .toggleAIChat,
             .toggleLastSidebarItem
         ]
 
@@ -81,22 +79,20 @@ extension CodeEditWindowController {
             .flexibleSpace,
             .itemListTrackingSeparator,
             .toggleLastSidebarItem,
-            .toggleAIChat,
             .branchPicker,
             .activityViewer,
             .notificationItem,
         ]
 
-        if #available(macOS 26, *) {
-            items += [
-                .taskSidebarItem
-            ]
-        } else {
-            items += [
-                .startTaskSidebarItem,
-                .stopTaskSidebarItem
-            ]
+        if FeatureFlags.cockpitView {
+            items += [.viewModeSwitcher]
         }
+
+        items += [
+            .taskSidebarItem,
+            .startTaskSidebarItem,
+            .stopTaskSidebarItem,
+        ]
 
         return items
     }
@@ -159,19 +155,6 @@ extension CodeEditWindowController {
             )?.withSymbolConfiguration(.init(scale: .large))
 
             return toolbarItem
-        case .toggleAIChat:
-            let toolbarItem = NSToolbarItem(itemIdentifier: NSToolbarItem.Identifier.toggleAIChat)
-            toolbarItem.paletteLabel = "AI Assistant"
-            toolbarItem.toolTip = "Show or hide the AI Chat Assistant"
-            toolbarItem.isBordered = true
-            toolbarItem.target = self
-            toolbarItem.action = #selector(self.objcToggleAIChat)
-            toolbarItem.image = NSImage(
-                systemSymbolName: "sparkles",
-                accessibilityDescription: nil
-            )?.withSymbolConfiguration(.init(scale: .large))
-
-            return toolbarItem
         case .stopTaskSidebarItem:
             return stopTaskSidebarItem()
         case .startTaskSidebarItem:
@@ -190,26 +173,31 @@ extension CodeEditWindowController {
             return activityViewerItem()
         case .notificationItem:
             return notificationItem()
+        case .viewModeSwitcher:
+            return viewModeSwitcherItem()
         case .taskSidebarItem:
-            guard #available(macOS 26, *) else {
-                fatalError("Unified task sidebar item used on pre-tahoe platform.")
-            }
-            guard let workspace,
-                    let stop = StopTaskToolbarItem(workspace: workspace) else {
-                return nil
-            }
-            let start = StartTaskToolbarItem(workspace: workspace)
-
-            let group = NSToolbarItemGroup(itemIdentifier: .taskSidebarItem)
-            group.isBordered = true
-            group.controlRepresentation = .expanded
-            group.selectionMode = .momentary
-            group.subitems = [stop, start]
-
-            return group
+            return taskSidebarMenuItem()
         default:
             return NSToolbarItem(itemIdentifier: itemIdentifier)
         }
+    }
+
+    private func taskSidebarMenuItem() -> NSToolbarItem? {
+        let toolbarItem = NSToolbarItem(itemIdentifier: .taskSidebarItem)
+        toolbarItem.visibilityPriority = .high
+        toolbarItem.toolTip = "Run or stop the selected task"
+
+        guard let workspace, let taskManager = workspace.taskManager else { return nil }
+
+        let view = NSHostingView(
+            rootView: TaskToolbarMenuButton(taskManager: taskManager)
+                .environmentObject(workspace)
+        )
+        toolbarItem.view = view
+        if #available(macOS 26, *) {
+            toolbarItem.isBordered = true
+        }
+        return toolbarItem
     }
 
     private func stopTaskSidebarItem() -> NSToolbarItem? {
@@ -246,6 +234,18 @@ extension CodeEditWindowController {
         let view = NSHostingView(rootView: NotificationToolbarItem().environmentObject(workspace))
         toolbarItem.view = view
         return toolbarItem
+    }
+
+    private func viewModeSwitcherItem() -> NSToolbarItem? {
+        guard FeatureFlags.cockpitView else { return nil }
+        let item = NSToolbarItem(itemIdentifier: .viewModeSwitcher)
+        item.visibilityPriority = .high
+        let view = NSHostingView(
+            rootView: ViewModeSwitcherToolbarView(windowController: self)
+        )
+        item.view = view
+        item.toolTip = "Switch between Cockpit and IDE views (⌘1 / ⌘2)"
+        return item
     }
 
     private func activityViewerItem() -> NSToolbarItem? {

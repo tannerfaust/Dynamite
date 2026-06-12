@@ -11,9 +11,18 @@ import AppKit
 /// # Please see dev note in ``CELocalShellTerminalView``!
 
 class CETerminalView: TerminalView {
+    private var terminalGridResizeWorkItem: DispatchWorkItem?
+    private var isApplyingTerminalGridResize = false
+    private var lastTerminalGridResizeTime: TimeInterval = 0
+
     override func setFrameSize(_ newSize: NSSize) {
         if newSize != .zero {
-            super.setFrameSize(newSize)
+            if isApplyingTerminalGridResize {
+                super.setFrameSize(newSize)
+            } else {
+                super.setFrameSize(newSize)
+                scheduleTerminalGridResize()
+            }
         }
     }
 
@@ -23,9 +32,47 @@ class CETerminalView: TerminalView {
         }
         set {
             if newValue.size != .zero {
-                super.frame = newValue
+                if isApplyingTerminalGridResize {
+                    super.frame = newValue
+                } else {
+                    super.setFrameOrigin(newValue.origin)
+                    super.setFrameSize(newValue.size)
+                    scheduleTerminalGridResize()
+                }
             }
         }
+    }
+
+    override func viewDidEndLiveResize() {
+        terminalGridResizeWorkItem?.cancel()
+        terminalGridResizeWorkItem = nil
+        applyTerminalGridResize()
+        super.viewDidEndLiveResize()
+    }
+
+    private func scheduleTerminalGridResize() {
+        guard terminalGridResizeWorkItem == nil else { return }
+        // Terminal buffer reflow is much more expensive than visually resizing the view.
+        // Keep it live, but capped low enough that split/window resize stays smooth.
+        let interval: TimeInterval = 1.0 / 12.0
+        let now = ProcessInfo.processInfo.systemUptime
+        let delay = max(0, interval - (now - lastTerminalGridResizeTime))
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.terminalGridResizeWorkItem = nil
+            self.lastTerminalGridResizeTime = ProcessInfo.processInfo.systemUptime
+            self.applyTerminalGridResize()
+        }
+        terminalGridResizeWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+    }
+
+    private func applyTerminalGridResize() {
+        guard frame.size != .zero else { return }
+        isApplyingTerminalGridResize = true
+        super.frame = frame
+        isApplyingTerminalGridResize = false
     }
 
     @objc

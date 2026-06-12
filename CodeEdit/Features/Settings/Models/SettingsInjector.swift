@@ -16,5 +16,7 @@ struct SettingsInjector<Content: View>: View {
     var body: some View {
         content
             .environment(\.settings, settings.preferences)
+            .tint(settings.preferences.general.appAccent.color)
+            .accentColor(settings.preferences.general.appAccent.color)
     }
 }

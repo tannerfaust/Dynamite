@@ -96,6 +96,9 @@ extension SettingsData {
         /// Auto save behavior toggle
         var isAutoSaveOn: Bool = true
 
+        /// The accent color theme of the app
+        var appAccent: AppAccentTheme = .defaultDynamite
+
         /// Default initializer
         init() {}
 
@@ -175,6 +178,10 @@ extension SettingsData {
                 Bool.self,
                 forKey: .isAutoSaveOn
             ) ?? true
+            self.appAccent = try container.decodeIfPresent(
+                AppAccentTheme.self,
+                forKey: .appAccent
+            ) ?? .defaultDynamite
         }
         // swiftlint:enable function_body_length
     }
@@ -312,6 +319,34 @@ extension SettingsData {
                 return "One Line"
             default:
                 return "Up to \(self.rawValue) lines"
+            }
+        }
+    }
+
+    enum AppAccentTheme: String, Codable, CaseIterable {
+        case claude
+        case cursor
+        case defaultDynamite
+
+        var label: String {
+            switch self {
+            case .claude:
+                return "Claude"
+            case .cursor:
+                return "Cursor"
+            case .defaultDynamite:
+                return "Default Dynamite (Hail Mary)"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .claude:
+                return Color(red: 0.85, green: 0.38, blue: 0.22)
+            case .cursor:
+                return Color(red: 0.05, green: 0.62, blue: 0.95)
+            case .defaultDynamite:
+                return Color(red: 0.22, green: 0.98, blue: 0.50)
             }
         }
     }

@@ -30,6 +30,7 @@ extension ProjectNavigatorViewController: NSOutlineViewDelegate {
             delegate: self,
             navigatorFilter: workspace?.navigatorFilter
         )
+        cell.workspace = workspace
         return cell
     }
 
@@ -47,6 +48,7 @@ extension ProjectNavigatorViewController: NSOutlineViewDelegate {
         if !item.isFolder && shouldSendSelectionUpdate {
             shouldSendSelectionUpdate = false
             if workspace?.editorManager?.activeEditor.selectedTab?.file != item {
+                workspace?.editorManager?.activeEditor.shouldFocusEditor = false
                 workspace?.editorManager?.activeEditor.openTab(file: item, asTemporary: true)
             }
             shouldSendSelectionUpdate = true

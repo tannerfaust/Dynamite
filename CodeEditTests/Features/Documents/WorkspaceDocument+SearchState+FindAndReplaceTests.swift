@@ -9,7 +9,7 @@ import XCTest
 @testable import CodeEdit
 
 @MainActor
-final class FindAndReplaceTests: XCTestCase { // swiftlint:disable:this type_body_length
+final class FindAndReplaceTests: XCTestCase {
     private var directory: URL!
     private var files: [CEWorkspaceFile] = []
     private var mockWorkspace: WorkspaceDocument!
@@ -23,19 +23,10 @@ final class FindAndReplaceTests: XCTestCase { // swiftlint:disable:this type_bod
     /// 3 mock files are added to the index
     /// which will be removed in the teardown function
     override func setUp() async throws {
-        directory = try FileManager.default.url(
-            for: .developerApplicationDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
-        .appending(path: "CodeEdit", directoryHint: .isDirectory)
-        .appending(path: "WorkspaceClientTests", directoryHint: .isDirectory)
+        directory = FileManager.default.temporaryDirectory
+            .appending(path: "WorkspaceClientTests-\(UUID().uuidString)", directoryHint: .isDirectory)
         try? FileManager.default.removeItem(at: directory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-
-        mockWorkspace = try WorkspaceDocument(for: directory, withContentsOf: directory, ofType: "")
-        searchState = mockWorkspace.searchState
 
         // Add a few files
         let folder1 = directory.appending(path: "Folder 2")
@@ -64,7 +55,8 @@ final class FindAndReplaceTests: XCTestCase { // swiftlint:disable:this type_bod
         files[1].parent = folder1File
         files[2].parent = folder2File
 
-        mockWorkspace.searchState?.addProjectToIndex()
+        mockWorkspace = try WorkspaceDocument(for: directory, withContentsOf: directory, ofType: "")
+        searchState = mockWorkspace.searchState
 
         // NOTE: This is a temporary solution. In the future, a file watcher should track file updates
         // and trigger an index update.
@@ -95,6 +87,45 @@ final class FindAndReplaceTests: XCTestCase { // swiftlint:disable:this type_bod
         try? FileManager.default.removeItem(at: directory)
     }
 
+    private func waitForSearchResultCount(
+        _ expectedCount: Int,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        await waitForExpectation(timeout: .seconds(5)) {
+            searchState.findNavigatorStatus == .found && searchState.searchResult.count == expectedCount
+        } onTimeout: {
+            XCTFail(
+                "Expected \(expectedCount) search results, got \(searchState.searchResult.count).",
+                file: file,
+                line: line
+            )
+        }
+    }
+
+    private func replace(
+        _ query: String,
+        with replacingTerm: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        do {
+            try await searchState.findAndReplace(query: query, replacingTerm: replacingTerm)
+        } catch {
+            XCTFail("Find and replace failed: \(error.localizedDescription)", file: file, line: line)
+        }
+    }
+
+    private func searchAndWait(
+        _ query: String,
+        expectedCount: Int,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        await searchState.search(query)
+        await waitForSearchResultCount(expectedCount, file: file, line: line)
+    }
+
     func reIndexWorkspace() async {
         // IMPORTANT:
         // This is only a temporary solution, in the feature a file watcher would track the file update
@@ -111,263 +142,78 @@ final class FindAndReplaceTests: XCTestCase { // swiftlint:disable:this type_bod
     }
 
     func testFindAndReplace() async {
-        let findAndReplaceExpectation = XCTestExpectation(description: "Find and replace")
-
-        Task {
-            do {
-                try await searchState.findAndReplace(query: "Ipsum", replacingTerm: "muspi")
-            } catch {
-                XCTFail("Find and replace failed: \(error.localizedDescription)")
-                return
-            }
-            findAndReplaceExpectation.fulfill()
-        }
-
-        await fulfillment(of: [findAndReplaceExpectation], timeout: 2)
-
+        await replace("Ipsum", with: "muspi")
         await reIndexWorkspace()
+        await searchAndWait("muspi", expectedCount: 2)
 
-        let searchExpectation = XCTestExpectation(
-            description: "Search for the new term that replaced 'Ipsum'('muspi')."
-        )
-
-        Task {
-            await searchState.search("muspi")
-            searchExpectation.fulfill()
-        }
-
-        await fulfillment(of: [searchExpectation], timeout: 2)
-        let searchResults = searchState.searchResult
-
-        // Expecting a result count of 0 due to the intentional use of a lowercase 'i'
-        XCTAssertEqual(searchResults.count, 2)
+        // Expecting a result count of 2 because "Ipsum" is replaced in two documents.
+        XCTAssertEqual(searchState.searchResult.count, 2)
     }
 
     func testFindAndReplaceWithOptionContaining() async {
-        let findAndReplaceExpectation = XCTestExpectation(description: "Find and replace")
-
-        Task {
-            do {
-                try await searchState.findAndReplace(query: "psu", replacingTerm: "OOO")
-            } catch {
-                XCTFail("Find and replace failed: \(error.localizedDescription)")
-                return
-            }
-            findAndReplaceExpectation.fulfill()
-        }
-
-        await fulfillment(of: [findAndReplaceExpectation], timeout: 2)
-
+        await replace("psu", with: "OOO")
         await reIndexWorkspace()
+        await searchAndWait("IOOOm", expectedCount: 2)
 
-        let searchExpectation = XCTestExpectation(
-            description: "Search for the new term that replaced 'Ipsum'('IOOOm')."
-        )
-
-        Task {
-            await searchState.search("IOOOm")
-            searchExpectation.fulfill()
-        }
-
-        await fulfillment(of: [searchExpectation], timeout: 2)
-        let searchResults = searchState.searchResult
-
-        XCTAssertEqual(searchResults.count, 2)
+        XCTAssertEqual(searchState.searchResult.count, 2)
     }
 
     func testFindAndReplaceWithOptionMatchingWord() async {
-        let failedFindAndReplaceExpectation = XCTestExpectation(description: "Failed Find and replace")
-        let successfulFindAndReplaceExpectation = XCTestExpectation(description: "Successful Find and replace")
-
         searchState.selectedMode[2] = .MatchingWord
 
-        Task {
-            do {
-                // this replacement should fail due to the .MatchingWord option
-                try await searchState.findAndReplace(query: "psu", replacingTerm: "OOO")
-            } catch {
-                XCTFail("Find and replace failed: \(error.localizedDescription)")
-                return
-            }
-            failedFindAndReplaceExpectation.fulfill()
-        }
-
-        await fulfillment(of: [failedFindAndReplaceExpectation], timeout: 2)
-
+        // This replacement should fail due to the .MatchingWord option.
+        await replace("psu", with: "OOO")
         await reIndexWorkspace()
-
-        let searchExpectation = XCTestExpectation(description: "Search for replaced word.")
-
-        Task {
-            await searchState.search("IOOOm")
-            searchExpectation.fulfill()
-        }
-
-        await fulfillment(of: [searchExpectation], timeout: 2)
-        let searchResults = searchState.searchResult
+        await searchAndWait("IOOOm", expectedCount: 0)
 
         // Expecting a result count of 0 due to the intentional use of a incomplete word, while using .MatchingWord
-        XCTAssertEqual(searchResults.count, 0)
+        XCTAssertEqual(searchState.searchResult.count, 0)
 
-        Task {
-            do {
-                // This should replace Ipsum correctly, because Ipsum is a whole word in 2 of the mock-documents
-                try await searchState.findAndReplace(query: "Ipsum", replacingTerm: "OOO")
-            } catch {
-                XCTFail("Find and replace failed: \(error.localizedDescription)")
-                return
-            }
-            successfulFindAndReplaceExpectation.fulfill()
-        }
-
-        await fulfillment(of: [successfulFindAndReplaceExpectation])
-
+        // This should replace Ipsum correctly, because Ipsum is a whole word in 2 of the mock-documents.
+        await replace("Ipsum", with: "OOO")
         await reIndexWorkspace()
-
-        let searchExpectation2 = XCTestExpectation(
-            description: "Search for the new term that replaced 'Ipsum'('OOO')."
-        )
-
-        Task {
-            await searchState.search("OOO")
-            searchExpectation2.fulfill()
-        }
-
-        await fulfillment(of: [searchExpectation2], timeout: 2)
-        let searchResults2 = searchState.searchResult
+        await searchAndWait("OOO", expectedCount: 2)
 
         // 'Ipsum' got replaced by '000' so we expecting 2 results(000 appears in two documents)
-        XCTAssertEqual(searchResults2.count, 2)
+        XCTAssertEqual(searchState.searchResult.count, 2)
     }
 
     func testFindAndReplaceWithOptionStartingWith() async {
-        let failedFindAndReplaceExpectation = XCTestExpectation(description: "Failed Find and replace")
-        let successfulFindAndReplaceExpectation = XCTestExpectation(description: "Successful Find and replace")
-
         searchState.selectedMode[2] = .StartingWith
 
-        Task {
-            do {
-                // this replacement should fail due to the .StartingWith option
-                try await searchState.findAndReplace(query: "psum", replacingTerm: "OOO")
-            } catch {
-                XCTFail("Find and replace failed: \(error.localizedDescription)")
-                return
-            }
-            failedFindAndReplaceExpectation.fulfill()
-        }
-
-        await fulfillment(of: [failedFindAndReplaceExpectation], timeout: 2)
-
+        // This replacement should fail due to the .StartingWith option.
+        await replace("psum", with: "OOO")
         await reIndexWorkspace()
-
-        let searchExpectation = XCTestExpectation(description: "Search for replaced word.")
-
-        Task {
-            await searchState.search("OOO")
-            searchExpectation.fulfill()
-        }
-
-        await fulfillment(of: [searchExpectation], timeout: 2)
-        let searchResults = searchState.searchResult
+        await searchAndWait("OOO", expectedCount: 0)
 
         // Expecting a result count of 0 due to the intentional use of a incomplete word, while using .MatchingWord
-        XCTAssertEqual(searchResults.count, 0)
+        XCTAssertEqual(searchState.searchResult.count, 0)
 
-        Task {
-            do {
-                // This should replace 'Ipsu' with '000' and result in '000m'
-                try await searchState.findAndReplace(query: "Ipsu", replacingTerm: "OOO")
-            } catch {
-                XCTFail("Find and replace failed: \(error.localizedDescription)")
-                return
-            }
-            successfulFindAndReplaceExpectation.fulfill()
-        }
-
-        await fulfillment(of: [successfulFindAndReplaceExpectation])
-
+        // This should replace 'Ipsu' with '000' and result in '000m'.
+        await replace("Ipsu", with: "OOO")
         await reIndexWorkspace()
+        await searchAndWait("OOOm", expectedCount: 2)
 
-        let searchExpectation2 = XCTestExpectation(
-            description: "Search for the new term that replaced 'Ipsum'('OOO')."
-        )
-
-        Task {
-            // Note that we are searching for '000m' instead of '000' to test that the whole word did not got replaced
-            await searchState.search("OOOm")
-            searchExpectation2.fulfill()
-        }
-
-        await fulfillment(of: [searchExpectation2], timeout: 2)
-        let searchResults2 = searchState.searchResult
-
-        XCTAssertEqual(searchResults2.count, 2)
+        XCTAssertEqual(searchState.searchResult.count, 2)
     }
 
     func testFindAndReplaceWithOptionEndingWith() async {
-        let failedFindAndReplaceExpectation = XCTestExpectation(description: "Failed Find and replace")
-        let successfulFindAndReplaceExpectation = XCTestExpectation(description: "Successful Find and replace")
-
         searchState.selectedMode[2] = .EndingWith
 
-        Task {
-            do {
-                // this replacement should fail due to the .EndingWith option
-                try await searchState.findAndReplace(query: "Ipsu", replacingTerm: "OOO")
-            } catch {
-                XCTFail("Find and replace failed: \(error.localizedDescription)")
-                return
-            }
-            failedFindAndReplaceExpectation.fulfill()
-        }
-
-        await fulfillment(of: [failedFindAndReplaceExpectation], timeout: 2)
-
+        // This replacement should fail due to the .EndingWith option.
+        await replace("Ipsu", with: "OOO")
         await reIndexWorkspace()
-
-        let searchExpectation = XCTestExpectation(description: "Search for replaced word.")
-
-        Task {
-            await searchState.search("OOO")
-            searchExpectation.fulfill()
-        }
-
-        await fulfillment(of: [searchExpectation], timeout: 2)
-        let searchResults = searchState.searchResult
+        await searchAndWait("OOO", expectedCount: 0)
 
         // Expecting a result count of 0 due to the intentional use of a incomplete word, while using .MatchingWord
-        XCTAssertEqual(searchResults.count, 0)
+        XCTAssertEqual(searchState.searchResult.count, 0)
 
-        Task {
-            do {
-                // This should replace 'Ipsu' with '000' and result in '000m'
-                try await searchState.findAndReplace(query: "sum", replacingTerm: "OOO")
-            } catch {
-                XCTFail("Find and replace failed: \(error.localizedDescription)")
-                return
-            }
-            successfulFindAndReplaceExpectation.fulfill()
-        }
-
-        await fulfillment(of: [successfulFindAndReplaceExpectation])
-
+        // This should replace 'sum' with '000' and result in 'Ip000'.
+        await replace("sum", with: "OOO")
         await reIndexWorkspace()
+        await searchAndWait("IpOOO", expectedCount: 2)
 
-        let searchExpectation2 = XCTestExpectation(
-            description: "Search for the new term that replaced 'Ipsum'('OOO')."
-        )
-
-        Task {
-            // Test that the entire word 'Ipsum' is not replaced by searching for 'Ip000'.
-            await searchState.search("IpOOO")
-            searchExpectation2.fulfill()
-        }
-
-        await fulfillment(of: [searchExpectation2], timeout: 2)
-        let searchResults2 = searchState.searchResult
-
-        XCTAssertEqual(searchResults2.count, 2)
+        XCTAssertEqual(searchState.searchResult.count, 2)
     }
 
     // Not implemented

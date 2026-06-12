@@ -82,7 +82,9 @@ final class ProjectNavigatorViewController: NSViewController {
         self.outlineView.autosaveExpandedItems = true
         self.outlineView.autosaveName = workspace?.workspaceFileManager?.folderUrl.path ?? ""
         self.outlineView.headerView = nil
-        self.outlineView.menu = ProjectNavigatorMenu(self)
+        let menu = ProjectNavigatorMenu(self)
+        menu.workspace = workspace
+        self.outlineView.menu = menu
         self.outlineView.menu?.delegate = self
         self.outlineView.doubleAction = #selector(onItemDoubleClicked)
         self.outlineView.allowsMultipleSelection = true
@@ -147,6 +149,28 @@ final class ProjectNavigatorViewController: NSViewController {
     @objc
     func revealFile(_ sender: Any) {
         updateSelection(itemID: workspace?.editorManager?.activeEditor.selectedTab?.file.id, forcesReveal: true)
+    }
+
+    /// Focuses the inline name editor for a file or folder in the project navigator.
+    func beginRenaming(_ fileToRename: CEWorkspaceFile) {
+        if let parent = fileToRename.parent {
+            outlineView.reloadItem(parent, reloadChildren: true)
+        }
+        reveal(fileToRename)
+
+        let row = outlineView.row(forItem: fileToRename)
+        guard row >= 0 else { return }
+
+        outlineView.layoutSubtreeIfNeeded()
+
+        guard let cell = outlineView.view(
+            atColumn: 0,
+            row: row,
+            makeIfNecessary: true
+        ) as? ProjectNavigatorTableViewCell else {
+            return
+        }
+        outlineView.window?.makeFirstResponder(cell.textField)
     }
 
     /// Updates the selection of the ``outlineView`` whenever it changes.

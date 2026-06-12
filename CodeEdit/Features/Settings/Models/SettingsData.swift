@@ -56,8 +56,8 @@ struct SettingsData: Codable, Hashable {
     /// Developer settings for CodeEdit developers
     var developerSettings: DeveloperSettings = .init()
 
-    /// AI Assistant Settings
-    var ai: AISettings = .init()
+    /// AI Assist settings (ADR-0007)
+    var aiAssist: AIAssistSettings = .init()
 
     /// Default initializer
     init() {}
@@ -86,8 +86,8 @@ struct SettingsData: Codable, Hashable {
         self.developerSettings = try container.decodeIfPresent(
             DeveloperSettings.self, forKey: .developerSettings
         ) ?? .init()
-        self.ai = try container.decodeIfPresent(
-            AISettings.self, forKey: .ai
+        self.aiAssist = try container.decodeIfPresent(
+            AIAssistSettings.self, forKey: .aiAssist
         ) ?? .init()
     }
 
@@ -120,8 +120,8 @@ struct SettingsData: Codable, Hashable {
             }
         case .developer:
             developerSettings.searchKeys.forEach { settings.append(.init(name, isSetting: true, settingName: $0)) }
-        case .aiSettings:
-            ai.searchKeys.forEach { settings.append(.init(name, isSetting: true, settingName: $0)) }
+        case .aiAssist:
+            aiAssist.searchKeys.forEach { settings.append(.init(name, isSetting: true, settingName: $0)) }
         case .behavior: return [.init(name, settingName: "Error")]
         case .components: return [.init(name, settingName: "Error")]
         case .keybindings: return [.init(name, settingName: "Error")]

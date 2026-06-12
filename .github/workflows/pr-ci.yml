@@ -1,0 +1,95 @@
+name: PR CI
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: pr-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROJECT: Dynamite.xcodeproj
+  SCHEME: Dynamite
+  TEST_PLAN: CodeEditTestPlan
+  SPM_SOURCE_PACKAGES_DIR: ${{ github.workspace }}/.spm
+
+jobs:
+  build-lint-test:
+    name: Build, Lint, and Test
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache Swift Package Manager dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .spm
+            ~/Library/Caches/org.swift.swiftpm
+          key: spm-${{ runner.os }}-${{ hashFiles('Dynamite.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: SwiftLint changed files
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "${BASE_REF}"
+            BASE_SHA="$(git merge-base "origin/${BASE_REF}" HEAD)"
+          else
+            BASE_SHA="${{ github.event.before }}"
+            if [ -z "${BASE_SHA}" ] || [ "${BASE_SHA}" = "0000000000000000000000000000000000000000" ]; then
+              BASE_SHA="HEAD~1"
+            fi
+          fi
+
+          changed_swift_files=()
+          while IFS= read -r file; do
+            [ -n "${file}" ] && changed_swift_files+=("${file}")
+          done < <(git diff --name-only --diff-filter=ACMRT "${BASE_SHA}" HEAD -- '*.swift')
+
+          if [ "${#changed_swift_files[@]}" -eq 0 ]; then
+            echo "No changed Swift files to lint."
+            exit 0
+          fi
+
+          echo "Linting ${#changed_swift_files[@]} changed Swift file(s):"
+          printf '  %s\n' "${changed_swift_files[@]}"
+          swiftlint lint --strict --reporter github-actions-logging "${changed_swift_files[@]}"
+
+      - name: Build Dynamite
+        run: |
+          set -euo pipefail
+          export LC_CTYPE=en_US.UTF-8
+
+          xcodebuild build \
+            -project "${PROJECT}" \
+            -scheme "${SCHEME}" \
+            -destination 'platform=macOS' \
+            -clonedSourcePackagesDirPath "${SPM_SOURCE_PACKAGES_DIR}" \
+            -skipPackagePluginValidation
+
+      - name: Test CodeEditTests
+        run: |
+          set -euo pipefail
+          export LC_CTYPE=en_US.UTF-8
+
+          xcodebuild test \
+            -project "${PROJECT}" \
+            -scheme "${SCHEME}" \
+            -testPlan "${TEST_PLAN}" \
+            -only-testing:CodeEditTests \
+            -destination 'platform=macOS' \
+            -clonedSourcePackagesDirPath "${SPM_SOURCE_PACKAGES_DIR}" \
+            -skipPackagePluginValidation \
+            -resultBundlePath TestResults.xcresult

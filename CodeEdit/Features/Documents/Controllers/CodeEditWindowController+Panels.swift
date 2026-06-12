@@ -17,15 +17,9 @@ extension CodeEditWindowController {
     func toggleFirstPanel(shouldAnimate: Bool = true) {
         guard let firstSplitView = splitViewController?.splitViewItems.first else { return }
 
-        if shouldAnimate {
-            // Standard animated toggle
-            firstSplitView.animator().isCollapsed.toggle()
-        } else {
-            // Instant toggle (no animation)
-            firstSplitView.isCollapsed.toggle()
-        }
-
-        splitViewController?.saveNavigatorCollapsedState(isCollapsed: firstSplitView.isCollapsed)
+        let targetState = !firstSplitView.isCollapsed
+        setSplitViewItem(firstSplitView, collapsed: targetState, animated: shouldAnimate)
+        splitViewController?.saveNavigatorCollapsedState(isCollapsed: targetState)
     }
 
     @objc
@@ -33,37 +27,29 @@ extension CodeEditWindowController {
         toggleLastPanel(shouldAnimate: true)
     }
 
-    @objc
-    func objcToggleAIChat() {
-        if let navigatorViewModel = navigatorSidebarViewModel,
-           let aiChatTab = navigatorViewModel.tabItems.first(where: { $0 == .aiChat }) {
-            if navigatorCollapsed {
-                toggleFirstPanel(shouldAnimate: true)
-                navigatorViewModel.setNavigatorTab(tab: aiChatTab)
-            } else if navigatorViewModel.selectedTab == .aiChat {
-                toggleFirstPanel(shouldAnimate: true)
-            } else {
-                navigatorViewModel.setNavigatorTab(tab: aiChatTab)
-            }
-        }
-    }
-
     func toggleLastPanel(shouldAnimate: Bool = true) {
         guard let lastSplitView = splitViewController?.splitViewItems.last else {
             return
         }
 
-        if shouldAnimate {
-            // Standard animated toggle
-            NSAnimationContext.runAnimationGroup { _ in
-                lastSplitView.animator().isCollapsed.toggle()
-            }
-        } else {
-            // Instant toggle (no animation)
-            lastSplitView.isCollapsed.toggle()
+        let targetState = !lastSplitView.isCollapsed
+        setSplitViewItem(lastSplitView, collapsed: targetState, animated: shouldAnimate)
+        splitViewController?.saveInspectorCollapsedState(isCollapsed: targetState)
+    }
+
+    private func setSplitViewItem(_ item: NSSplitViewItem, collapsed: Bool, animated: Bool) {
+        guard item.isCollapsed != collapsed else {
+            return
         }
 
-        splitViewController?.saveInspectorCollapsedState(isCollapsed: lastSplitView.isCollapsed)
+        if animated {
+            NSAnimationContext.runAnimationGroup { context in
+                context.allowsImplicitAnimation = true
+                item.animator().isCollapsed = collapsed
+            }
+        } else {
+            item.isCollapsed = collapsed
+        }
     }
 
     // PanelDescriptor, used for an array of panels, for use with "Hide interface".

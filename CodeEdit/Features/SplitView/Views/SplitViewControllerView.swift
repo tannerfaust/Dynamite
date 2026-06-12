@@ -28,6 +28,7 @@ struct SplitViewControllerView: NSViewControllerRepresentable {
 
     private func updateItems(controller: SplitViewController) {
         var hasChanged = false
+        let previousIDs = controller.items.map(\.id)
         // Reorder viewcontrollers if needed and add new ones.
         controller.items = children.map { child in
             let item: SplitViewItem
@@ -41,7 +42,10 @@ struct SplitViewControllerView: NSViewControllerRepresentable {
             return item
         }
 
-        controller.splitViewItems = controller.items.map(\.item)
+        let currentIDs = controller.items.map(\.id)
+        if hasChanged || previousIDs != currentIDs || controller.splitViewItems.count != controller.items.count {
+            controller.splitViewItems = controller.items.map(\.item)
+        }
 
         if hasChanged && controller.splitViewItems.count > 1 {
             let splitView = controller.splitView
@@ -156,6 +160,11 @@ final class SplitViewController: NSSplitViewController {
     }
 
     func collapse(for id: AnyHashable, enabled: Bool) {
-        items.first { $0.id == id }?.item.animator().isCollapsed = enabled
+        guard let item = items.first(where: { $0.id == id })?.item,
+              item.isCollapsed != enabled else {
+            return
+        }
+
+        item.animator().isCollapsed = enabled
     }
 }

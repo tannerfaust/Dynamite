@@ -103,14 +103,10 @@ struct EditorJumpBarView: View {
                 containerWidth = newValue
             }
             .onChange(of: textWidth) { _, _ in
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    resize()
-                }
+                resize()
             }
             .onChange(of: containerWidth) { _, _ in
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    resize()
-                }
+                resize()
             }
         }
         .padding(.horizontal, shouldShowTabBar ? (file == nil ? 10 : 4) : 0)
@@ -142,13 +138,13 @@ struct EditorJumpBarView: View {
             if betweenWidth < snapThreshold {
                 betweenWidth = minWidth
             }
-            crumbWidth = betweenWidth
+            setIfChanged(&crumbWidth, betweenWidth)
         } else {
-            crumbWidth = nil
+            setIfChanged(&crumbWidth, nil)
         }
 
         if betweenWidth > snapThreshold || crumbWidth == nil {
-            firstCrumbWidth = nil
+            setIfChanged(&firstCrumbWidth, nil)
         } else {
             let otherCrumbs = CGFloat(max(fileItems.count - 1, 1))
             let usedWidth = otherCrumbs * snapThreshold
@@ -158,10 +154,21 @@ struct EditorJumpBarView: View {
             let crumbSpacingMultiplier: CGFloat = 1.5
             let availableForFirst = containerWidth - usedWidth * crumbSpacingMultiplier
             if availableForFirst < snapThreshold {
-                firstCrumbWidth = minWidth
+                setIfChanged(&firstCrumbWidth, minWidth)
             } else {
-                firstCrumbWidth = availableForFirst
+                setIfChanged(&firstCrumbWidth, availableForFirst)
             }
+        }
+    }
+
+    private func setIfChanged(_ value: inout CGFloat?, _ newValue: CGFloat?) {
+        switch (value, newValue) {
+        case (nil, nil):
+            return
+        case let (current?, next?) where abs(current - next) < 0.5:
+            return
+        default:
+            value = newValue
         }
     }
 }

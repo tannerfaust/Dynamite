@@ -13,6 +13,8 @@ xcuserdata/
 ## compatibility with Xcode 3 and earlier (ignoring not required starting Xcode 4)
 build/
 DerivedData/
+.derivedData/
+.SourcePackages/
 *.moved-aside
 *.pbxuser
 !default.pbxuser
@@ -96,3 +98,7 @@ iOSInjectionProject/
 .codeedit
 .idea
 .vscode
+
+# Dynamite local/runtime artifacts
+.dynamite/
+*.profraw

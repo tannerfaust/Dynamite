@@ -22,10 +22,9 @@ struct EditorJumpBarComponent: View {
 
     @EnvironmentObject var workspace: WorkspaceDocument
 
-    @State var position: NSPoint?
     @State var selection: CEWorkspaceFile
     @State var isHovering: Bool = false
-    @State var button = NSPopUpButton()
+    @State private var button: NSPopUpButton?
     @Binding var truncatedCrumbWidth: CGFloat?
 
     init(
@@ -57,6 +56,7 @@ struct EditorJumpBarComponent: View {
         NSPopUpButtonView(selection: $selection) {
             guard let fileManager = workspace.workspaceFileManager else { return NSPopUpButton() }
 
+            let button = NSPopUpButton()
             button.menu = EditorJumpBarMenu(
                 fileItems: siblings,
                 fileManager: fileManager,
@@ -67,6 +67,8 @@ struct EditorJumpBarComponent: View {
             (button.cell as? NSPopUpButtonCell)?.arrowPosition = .noArrow
 
             return button
+        } onCreate: { button in
+            self.button = button
         }
         .frame(
             maxWidth: isHovering || isLastItem ? nil : truncatedCrumbWidth,
@@ -113,7 +115,7 @@ struct EditorJumpBarComponent: View {
             }
         }
         .onLongPressGesture(minimumDuration: 0) {
-            button.performClick(nil)
+            button?.performClick(nil)
         }
         .opacity(activeState != .inactive ? 1 : 0.75)
     }
@@ -139,6 +141,7 @@ struct EditorJumpBarComponent: View {
         @Binding var selection: ItemType
 
         var popupCreator: () -> NSPopUpButton
+        var onCreate: (NSPopUpButton) -> Void
 
         typealias NSViewType = NSPopUpButton
 
@@ -147,6 +150,9 @@ struct EditorJumpBarComponent: View {
             setPopUpFromSelection(newPopupButton, selection: selection)
             if let menu = newPopupButton.menu {
                 context.coordinator.registerForChanges(in: menu)
+            }
+            DispatchQueue.main.async {
+                onCreate(newPopupButton)
             }
             return newPopupButton
         }

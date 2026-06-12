@@ -134,6 +134,13 @@ class EditorInstance: ObservableObject, Hashable {
 
         func controllerDidAppear(controller: TextViewController) {
             if controller.isEditable && controller.isSelectable {
+                if let windowController = controller.view.window?.windowController as? CodeEditWindowController,
+                   let editor = windowController.workspace?.editorManager?.activeEditor {
+                    if !editor.shouldFocusEditor {
+                        editor.shouldFocusEditor = true // Reset for next time
+                        return
+                    }
+                }
                 controller.view.window?.makeFirstResponder(controller.textView)
             }
         }

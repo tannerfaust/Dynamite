@@ -87,7 +87,7 @@ struct WorkspaceView: View {
                     .task {
                         // Only refresh git data if source control is enabled
                         guard sourceControlIsEnabled else { return }
-                        
+
                         do {
                             try await sourceControlManager.refreshRemotes()
                             try await sourceControlManager.refreshStashEntries()
@@ -120,7 +120,7 @@ struct WorkspaceView: View {
                     }
                 }
             }
-            .background(EffectView(.hudWindow, blendingMode: .behindWindow))
+            .background(EffectView(.contentBackground))
             .background(WorkspaceSheets().environmentObject(sourceControlManager))
             .onDrop(of: [.fileURL], isTargeted: nil) { providers in
                 _ = handleDrop(providers: providers)

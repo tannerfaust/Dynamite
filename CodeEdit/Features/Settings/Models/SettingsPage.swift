@@ -33,8 +33,8 @@ struct SettingsPage: Hashable, Equatable, Identifiable {
         case location = "Locations"
         case advanced = "Advanced"
         case languageServers = "Language Servers"
+        case aiAssist = "AI Assist"
         case developer = "Developer"
-        case aiSettings = "AI Assistant"
     }
 
     let id: UUID = UUID()

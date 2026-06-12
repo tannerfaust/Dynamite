@@ -1,3 +1,4 @@
+// swiftlint:disable attributes line_length
 //
 //  CodeFileView.swift
 //  CodeEditModules/CodeFile
@@ -35,6 +36,10 @@ struct CodeFileView: View {
     var overscroll
     @AppSettings(\.textEditing.font)
     var settingsFont
+    @AppSettings(\.textEditing.markdownPreviewFont)
+    var markdownPreviewFont
+    @AppSettings(\.textEditing.markdownPreviewEnabled)
+    var markdownPreviewEnabled
     @AppSettings(\.theme.useThemeBackground)
     var useThemeBackground
     @AppSettings(\.theme.matchAppearance)
@@ -60,9 +65,6 @@ struct CodeFileView: View {
     @AppSettings(\.textEditing.warningCharacters)
     var warningCharacters
 
-    @Environment(\.colorScheme)
-    private var colorScheme
-
     @EnvironmentObject var undoRegistration: UndoManagerRegistration
 
     @ObservedObject private var themeModel: ThemeModel = .shared
@@ -72,12 +74,14 @@ struct CodeFileView: View {
     private var cancellables = Set<AnyCancellable>()
 
     private let isEditable: Bool
+    private let showMinimapOverride: Bool?
 
     init(
         editorInstance: EditorInstance,
         codeFile: CodeFileDocument,
         textViewCoordinators: [TextViewCoordinator] = [],
-        isEditable: Bool = true
+        isEditable: Bool = true,
+        showMinimapOverride: Bool? = nil
     ) {
         self._editorInstance = .init(wrappedValue: editorInstance)
         self._codeFile = .init(wrappedValue: codeFile)
@@ -87,6 +91,7 @@ struct CodeFileView: View {
             + [codeFile.contentCoordinator]
             + [codeFile.languageServerObjects.textCoordinator]
         self.isEditable = isEditable
+        self.showMinimapOverride = showMinimapOverride
 
         if let openOptions = codeFile.openOptions {
             codeFile.openOptions = nil
@@ -109,12 +114,43 @@ struct CodeFileView: View {
     }
 
     @State private var font: NSFont = Settings[\.textEditing].font.current
+    @State private var markdownFont: NSFont = Settings[\.textEditing].markdownPreviewFont.current
 
     @Environment(\.edgeInsets)
     private var edgeInsets
 
+    private var markdownTheme: MarkdownTheme {
+        MarkdownTheme.from(editor: currentTheme.editor, baseFont: markdownFont)
+    }
+
+    @ViewBuilder
     var body: some View {
-        SourceEditor(
+        Group {
+            if codeFile.isMarkdown, markdownPreviewEnabled {
+                MarkdownPreviewView(codeFile: codeFile, theme: markdownTheme)
+            } else {
+                sourceEditor
+            }
+        }
+        // This view needs to refresh when the codefile changes. The file URL is too stable.
+        .id(ObjectIdentifier(codeFile))
+        .background(useThemeBackground ? Color(hex: currentTheme.editor.background.color) : Color(NSColor.textBackgroundColor))
+        .colorScheme(currentTheme.appearance == .dark ? .dark : .light)
+        // minHeight zero fixes a bug where the app would freeze if the contents of the file are empty.
+        .frame(minHeight: .zero, maxHeight: .infinity)
+        .onChange(of: settingsFont) { _, newFontSetting in
+            font = newFontSetting.current
+        }
+        .onChange(of: markdownPreviewFont) { _, newFontSetting in
+            markdownFont = newFontSetting.current
+        }
+    }
+
+    private var sourceEditor: some View {
+        let effectiveWrapLines = codeFile.wrapLines ?? wrapLinesToEditorWidth
+        let effectiveShowMinimap = showMinimapOverride ?? showMinimap
+
+        return SourceEditor(
             codeFile.content ?? NSTextStorage(),
             language: codeFile.getLanguage(),
             configuration: SourceEditorConfiguration(
@@ -124,7 +160,7 @@ struct CodeFileView: View {
                     font: font,
                     lineHeightMultiple: lineHeightMultiple,
                     letterSpacing: letterSpacing,
-                    wrapLines: wrapLinesToEditorWidth,
+                    wrapLines: effectiveWrapLines,
                     useSystemCursor: useSystemCursor,
                     tabWidth: defaultTabWidth,
                     bracketPairEmphasis: getBracketPairEmphasis()
@@ -141,7 +177,7 @@ struct CodeFileView: View {
                 ),
                 peripherals: .init(
                     showGutter: showGutter,
-                    showMinimap: showMinimap,
+                    showMinimap: effectiveShowMinimap,
                     showReformattingGuide: showReformattingGuide,
                     showFoldingRibbon: showFoldingRibbon,
                     invisibleCharactersConfiguration: invisibleCharactersConfiguration.textViewOption(),
@@ -170,15 +206,6 @@ struct CodeFileView: View {
             undoManager: undoRegistration.manager(forFile: editorInstance.file),
             coordinators: textViewCoordinators
         )
-        // This view needs to refresh when the codefile changes. The file URL is too stable.
-        .id(ObjectIdentifier(codeFile))
-        .background(useThemeBackground ? Color(currentTheme.editor.background.color) : Color(NSColor.textBackgroundColor))
-        .colorScheme(currentTheme.appearance == .dark ? .dark : .light)
-        // minHeight zero fixes a bug where the app would freeze if the contents of the file are empty.
-        .frame(minHeight: .zero, maxHeight: .infinity)
-        .onChange(of: settingsFont) { _, newFontSetting in
-            font = newFontSetting.current
-        }
     }
 
     /// Determines the style of bracket emphasis based on the `bracketEmphasis` setting and the current theme.

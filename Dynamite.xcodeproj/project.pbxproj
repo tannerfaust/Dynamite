@@ -683,6 +683,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = "Change in Info.plist";
 				PRODUCT_BUNDLE_IDENTIFIER = app.codeedit.Dynamite;
+				PRODUCT_MODULE_NAME = CodeEdit;
 				PRODUCT_NAME = Dynamite;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -719,7 +720,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CodeEdit.app/Contents/MacOS/CodeEdit";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Dynamite.app/Contents/MacOS/Dynamite";
 			};
 			name = Alpha;
 		};
@@ -884,6 +885,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = "Change in Info.plist";
 				PRODUCT_BUNDLE_IDENTIFIER = app.codeedit.Dynamite;
+				PRODUCT_MODULE_NAME = CodeEdit;
 				PRODUCT_NAME = Dynamite;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -920,7 +922,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CodeEdit.app/Contents/MacOS/CodeEdit";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Dynamite.app/Contents/MacOS/Dynamite";
 			};
 			name = Beta;
 		};
@@ -1157,6 +1159,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = "Change in Info.plist";
 				PRODUCT_BUNDLE_IDENTIFIER = app.codeedit.Dynamite;
+				PRODUCT_MODULE_NAME = CodeEdit;
 				PRODUCT_NAME = Dynamite;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -1193,7 +1196,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CodeEdit.app/Contents/MacOS/CodeEdit";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Dynamite.app/Contents/MacOS/Dynamite";
 			};
 			name = Pre;
 		};
@@ -1430,6 +1433,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = "Change in Info.plist";
 				PRODUCT_BUNDLE_IDENTIFIER = app.codeedit.Dynamite;
+				PRODUCT_MODULE_NAME = CodeEdit;
 				PRODUCT_NAME = Dynamite;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -1474,6 +1478,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = "Change in Info.plist";
 				PRODUCT_BUNDLE_IDENTIFIER = app.codeedit.Dynamite;
+				PRODUCT_MODULE_NAME = CodeEdit;
 				PRODUCT_NAME = Dynamite;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -1510,7 +1515,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CodeEdit.app/Contents/MacOS/CodeEdit";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Dynamite.app/Contents/MacOS/Dynamite";
 			};
 			name = Debug;
 		};
@@ -1537,7 +1542,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CodeEdit.app/Contents/MacOS/CodeEdit";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Dynamite.app/Contents/MacOS/Dynamite";
 			};
 			name = Release;
 		};

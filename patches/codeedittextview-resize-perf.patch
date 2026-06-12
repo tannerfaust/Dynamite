@@ -1,0 +1,299 @@
+diff --git a/Sources/CodeEditTextView/Extensions/CTTypesetter+SuggestLineBreak.swift b/Sources/CodeEditTextView/Extensions/CTTypesetter+SuggestLineBreak.swift
+index fefe985..d128451 100644
+--- a/Sources/CodeEditTextView/Extensions/CTTypesetter+SuggestLineBreak.swift
++++ b/Sources/CodeEditTextView/Extensions/CTTypesetter+SuggestLineBreak.swift
+@@ -43,6 +43,29 @@ extension CTTypesetter {
+     ///   - startingOffset: Where to start breaking.
+     ///   - constrainingWidth: The available space for the line.
+     /// - Returns: An offset relative to the entire string indicating where to break.
++    /// Returns the number of characters from `offset` that fit in `constrainingWidth`, guaranteeing at least one
++    /// composed character cluster of forward progress.
++    ///
++    /// `CTTypesetterSuggestClusterBreak` returns `0` when not even a single character cluster fits in
++    /// `constrainingWidth` — which happens when the width is non-positive (e.g. a view, such as the minimap, is
++    /// laid out before it has been sized). Returning `0` makes the typesetting loop in `Typesetter` produce a
++    /// zero-length fragment and never advance, spinning a CPU core at 100% forever (an app hang) even on tiny
++    /// files. Forcing at least one cluster guarantees the loop terminates; the line simply isn't visually wrapped
++    /// until a real width is available, at which point it re-typesets correctly.
++    private func clusterBreakEnsuringProgress(
++        string: NSAttributedString,
++        offset: Int,
++        constrainingWidth: CGFloat
++    ) -> Int {
++        let count = CTTypesetterSuggestClusterBreak(self, offset, constrainingWidth)
++        if count > 0 {
++            return count
++        }
++        guard offset < string.length else { return 0 }
++        let clusterRange = (string.string as NSString).rangeOfComposedCharacterSequence(at: offset)
++        return max(1, clusterRange.location + clusterRange.length - offset)
++    }
++
+     private func suggestLineBreakForCharacter(
+         string: NSAttributedString,
+         startingOffset: Int,
+@@ -51,7 +74,11 @@ extension CTTypesetter {
+         var breakIndex: Int
+         // Check if we need to skip to an attachment
+
+-        breakIndex = startingOffset + CTTypesetterSuggestClusterBreak(self, startingOffset, constrainingWidth)
++        breakIndex = startingOffset + clusterBreakEnsuringProgress(
++            string: string,
++            offset: startingOffset,
++            constrainingWidth: constrainingWidth
++        )
+         guard breakIndex < string.length else {
+             return breakIndex
+         }
+@@ -75,7 +102,11 @@ extension CTTypesetter {
+         subrange: NSRange,
+         constrainingWidth: CGFloat
+     ) -> Int {
+-        var breakIndex = subrange.location + CTTypesetterSuggestClusterBreak(self, subrange.location, constrainingWidth)
++        var breakIndex = subrange.location + clusterBreakEnsuringProgress(
++            string: string,
++            offset: subrange.location,
++            constrainingWidth: constrainingWidth
++        )
+         let isBreakAtEndOfString = breakIndex >= subrange.max
+
+         let isNextCharacterCarriageReturn = checkIfLineBreakOnCRLF(breakIndex, for: string)
+diff --git a/Sources/CodeEditTextView/TextLine/FastID.swift b/Sources/CodeEditTextView/TextLine/FastID.swift
+new file mode 100644
+index 0000000..87502a2
+--- /dev/null
++++ b/Sources/CodeEditTextView/TextLine/FastID.swift
+@@ -0,0 +1,40 @@
++//
++//  FastID.swift
++//  CodeEditTextView
++//
++//  Fast, process-unique identifier generation for layout objects.
++//
++//  Swift's `UUID()` calls `uuid_generate_random`, which draws from the system
++//  CSPRNG (an AES-CTR DRBG in corecrypto). During a live window/pane resize the
++//  layout system re-typesets every visible line on each frame, allocating
++//  thousands of `LineFragment` / `TextLine` instances. Minting a cryptographic
++//  UUID for each one makes the CSPRNG dominate CPU and pegs a core, which shows
++//  up as a few-FPS stutter while resizing or dragging split dividers.
++//
++//  These identifiers only need to be unique within the running process, so we
++//  mint them from a monotonic counter instead. The result is still a `UUID`
++//  (preserving all existing API and `Identifiable`/`Hashable` usage) but costs
++//  a single atomic increment instead of a crypto draw.
++//
++
++import Foundation
++import os
++
++enum FastID {
++    private static let counter = OSAllocatedUnfairLock(initialState: UInt64(0))
++
++    /// Returns a process-unique `UUID` backed by a monotonic counter (no CSPRNG).
++    static func next() -> UUID {
++        let value = counter.withLock { state -> UInt64 in
++            state &+= 1
++            return state
++        }
++        let bytes = withUnsafeBytes(of: value.bigEndian, Array.init)
++        // Fixed prefix ("CEED7E") marks these as CodeEditTextView sequential ids;
++        // the low 8 bytes carry the counter, guaranteeing in-process uniqueness.
++        return UUID(uuid: (
++            0xCE, 0xED, 0x7E, 0x00, 0x00, 0x00, 0x00, 0x00,
++            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]
++        ))
++    }
++}
+diff --git a/Sources/CodeEditTextView/TextLine/LineFragment.swift b/Sources/CodeEditTextView/TextLine/LineFragment.swift
+index 646bf76..0c4c3e2 100644
+--- a/Sources/CodeEditTextView/TextLine/LineFragment.swift
++++ b/Sources/CodeEditTextView/TextLine/LineFragment.swift
+@@ -46,7 +46,7 @@ public final class LineFragment: Identifiable, Equatable {
+         let offset: Int
+     }
+
+-    public let id = UUID()
++    public let id = FastID.next()
+     public var documentRange: NSRange = .notFound
+     public var contents: [FragmentContent]
+     public var width: CGFloat
+diff --git a/Sources/CodeEditTextView/TextLine/LineFragmentView.swift b/Sources/CodeEditTextView/TextLine/LineFragmentView.swift
+index 66af428..17aace5 100644
+--- a/Sources/CodeEditTextView/TextLine/LineFragmentView.swift
++++ b/Sources/CodeEditTextView/TextLine/LineFragmentView.swift
+@@ -27,10 +27,25 @@ open class LineFragmentView: NSView {
+
+     public override init(frame frameRect: NSRect) {
+         super.init(frame: frameRect)
++        configureLayer()
+     }
+
+     required public init?(coder: NSCoder) {
+         super.init(coder: coder)
++        configureLayer()
++    }
++
++    /// Give every fragment its own backing layer.
++    ///
++    /// Without this, fragment views draw into the parent text view's shared layer. On some macOS
++    /// versions, when a fragment is re-laid-out, moved, or retired during a re-wrap, the pixels it
++    /// previously drew into that shared backing are not reliably cleared — leaving "ghost"
++    /// duplicated text on wrapped lines (e.g. the next line's first word clipped at the end of the
++    /// line above it). An independent, opaque-redraw layer per fragment lets Core Animation
++    /// composite and clear each fragment cleanly, eliminating the ghosting.
++    private func configureLayer() {
++        wantsLayer = true
++        layerContentsRedrawPolicy = .onSetNeedsDisplay
+     }
+
+ #if DEBUG_LINE_INVALIDATION
+diff --git a/Sources/CodeEditTextView/TextLine/TextLine.swift b/Sources/CodeEditTextView/TextLine/TextLine.swift
+index b9038a6..8418c77 100644
+--- a/Sources/CodeEditTextView/TextLine/TextLine.swift
++++ b/Sources/CodeEditTextView/TextLine/TextLine.swift
+@@ -10,7 +10,7 @@ import AppKit
+
+ /// Represents a displayable line of text.
+ public final class TextLine: Identifiable, Equatable {
+-    public let id: UUID = UUID()
++    public let id: UUID = FastID.next()
+     private var needsLayout: Bool = true
+     var maxWidth: CGFloat?
+     private(set) var typesetter: Typesetter = Typesetter()
+diff --git a/Sources/CodeEditTextView/TextLine/Typesetter/Typesetter.swift b/Sources/CodeEditTextView/TextLine/Typesetter/Typesetter.swift
+index b5edb85..df88090 100644
+--- a/Sources/CodeEditTextView/TextLine/Typesetter/Typesetter.swift
++++ b/Sources/CodeEditTextView/TextLine/Typesetter/Typesetter.swift
+@@ -171,22 +171,39 @@ final public class Typesetter {
+
+         // Layout as many fragments as possible in this content run
+         while context.currentPosition < range.max {
+-            // The line break indicates the distance from the range we’re typesetting on that should be broken at.
+-            // It's relative to the range being typeset, not the line
++            // `suggestLineBreak` returns an offset relative to the start of the range being typeset (the
++            // run): `runRelativeStart + count`. It is NOT a count of characters.
++            let runRelativeStart = context.currentPosition - range.location
+             let lineBreak = typesetter.suggestLineBreak(
+                 using: substring,
+                 strategy: displayData.breakStrategy,
+-                subrange: NSRange(start: context.currentPosition - range.location, end: range.length),
++                subrange: NSRange(start: runRelativeStart, end: range.length),
+                 constrainingWidth: displayData.maxWidth - context.fragmentContext.width
+             )
+-
+-            // Indicates the subrange on the range that the typesetter knows about. This may not be the entire line
+-            let typesetSubrange = NSRange(location: context.currentPosition - range.location, length: lineBreak)
++            let fragmentLength = lineBreak - runRelativeStart
++
++            // Indicates the subrange on the range that the typesetter knows about. This may not be the entire line.
++            //
++            // Dynamite fix: the length here must be `lineBreak - runRelativeStart`, not `lineBreak` (which is an
++            // absolute offset within the run). Using the offset as a length built every fragment after a run's
++            // first one `runRelativeStart` characters TOO LONG: the oversized CTLine re-drew the next fragment's
++            // text past the break point (the "duplicated wrapped text near the right edge" ghost on lines wrapped
++            // to 3+ rows) and corrupted hit-testing in the overflow region (clicks near the right edge resolved
++            // to characters that belong to the next row).
++            let typesetSubrange = NSRange(location: runRelativeStart, length: fragmentLength)
+             let typesetData = typesetLine(typesetter: typesetter, range: typesetSubrange)
+
+             // The typesetter won't tell us if 0 characters can fit in the constrained space. This checks to
+-            // make sure we can fit something. If not, we pop and continue
+-            if lineBreak == 1 && context.fragmentContext.width + typesetData.width > displayData.maxWidth {
++            // make sure we can fit something. If not, we pop and continue.
++            //
++            // IMPORTANT: only pop-and-retry when the current fragment already has content — popping then frees up
++            // the full line width for the cluster on the next pass. If the fragment is *empty*, popping gains no
++            // width, so a cluster that's wider than `maxWidth` (e.g. when the view isn't sized yet and `maxWidth`
++            // is ~0) would loop forever without ever advancing `currentPosition`. In that case fall through and
++            // place the cluster anyway (accepting overflow) so layout always makes progress and terminates.
++            if fragmentLength == 1
++                && context.fragmentContext.width + typesetData.width > displayData.maxWidth
++                && !context.fragmentContext.contents.isEmpty {
+                 context.popCurrentData()
+                 continue
+             }
+diff --git a/Sources/CodeEditTextView/Utils/ViewReuseQueue.swift b/Sources/CodeEditTextView/Utils/ViewReuseQueue.swift
+index 3b85c6a..2f17592 100644
+--- a/Sources/CodeEditTextView/Utils/ViewReuseQueue.swift
++++ b/Sources/CodeEditTextView/Utils/ViewReuseQueue.swift
+@@ -49,12 +49,18 @@ public class ViewReuseQueue<View: NSView, Key: Hashable> {
+     /// - Parameter key: The key for the view to reuse.
+     public func enqueueView(forKey key: Key) {
+         guard let view = usedViews[key] else { return }
++        // Always remove a retired view from the hierarchy. The previous behavior kept some
++        // enqueued views in the superview as hidden, zero-framed subviews for faster reuse — but
++        // on some macOS versions those retired fragment views could resurface and render on top
++        // of the current layout, producing "ghost" duplicated text on wrapped lines (the next
++        // line's first word clipped at the end of the line above it). Removing the view from the
++        // superview eliminates that class of bug; reuse still works because we keep the instance
++        // in `queuedViews` and re-add it on the next `getOrCreateView`.
++        view.removeFromSuperviewWithoutNeedingDisplay()
+         if queuedViews.count < usedViews.count {
+-            queuedViews.append(view)
+             view.frame = .zero
+             view.isHidden = true
+-        } else {
+-            view.removeFromSuperviewWithoutNeedingDisplay()
++            queuedViews.append(view)
+         }
+         usedViews.removeValue(forKey: key)
+     }
+diff --git a/Tests/CodeEditTextViewTests/TypesetterTests.swift b/Tests/CodeEditTextViewTests/TypesetterTests.swift
+index 92826c3..ca7e8d8 100644
+--- a/Tests/CodeEditTextViewTests/TypesetterTests.swift
++++ b/Tests/CodeEditTextViewTests/TypesetterTests.swift
+@@ -284,4 +284,54 @@ class TypesetterTests: XCTestCase {
+
+         XCTAssertEqual(typesetter.lineFragments.count, 1)
+     }
++
++    // MARK: - Wrapped fragment CTLine ranges (Dynamite regression)
++
++    /// Regression test: every wrapped fragment's CTLine must cover exactly the fragment's range.
++    ///
++    /// `suggestLineBreak` returns an offset relative to the run start, not a count. Using that offset as
++    /// the CTLine *length* built every fragment after the first too long — the oversized CTLine re-drew
++    /// the next fragment's text past the break point ("duplicated wrapped text near the right edge" on
++    /// lines wrapped to 3+ rows) and corrupted hit-testing near the wrap boundary.
++    func test_wrappedFragmentCTLinesMatchFragmentRanges() throws {
++        let text = String(
++            repeating: "The quick brown fox jumps over the lazy dog. ",
++            count: 8
++        )
++        for strategy in [LineBreakStrategy.character, .word] {
++            typesetter.typeset(
++                NSAttributedString(string: text, attributes: attributes),
++                documentRange: NSRange(location: 0, length: (text as NSString).length),
++                displayData: TextLine.DisplayData(
++                    maxWidth: 150,
++                    lineHeightMultiplier: 1.0,
++                    estimatedLineHeight: 20.0,
++                    breakStrategy: strategy
++                ),
++                markedRanges: nil,
++                attachments: []
++            )
++
++            // The narrow width must produce a multi-fragment (3+) wrap, or this test checks nothing.
++            XCTAssertGreaterThan(typesetter.lineFragments.count, 2, "Expected a 3+ row wrap (\(strategy))")
++
++            for fragment in typesetter.lineFragments {
++                XCTAssertEqual(fragment.data.contents.count, 1, "Plain text should be one content run")
++                guard case .text(let ctLine) = fragment.data.contents[0].data else {
++                    XCTFail("Expected text content")
++                    return
++                }
++                let ctRange = CTLineGetStringRange(ctLine)
++                XCTAssertEqual(
++                    ctRange.location, fragment.range.location,
++                    "CTLine must start at the fragment start (\(strategy))"
++                )
++                XCTAssertEqual(
++                    ctRange.length, fragment.range.length,
++                    "CTLine must cover exactly the fragment's characters — no overflow into the "
++                    + "next wrapped row (\(strategy))"
++                )
++            }
++        }
++    }
+ }
