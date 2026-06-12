@@ -56,10 +56,11 @@ struct EditorTabBarTrailingAccessories: View {
             .overlay {
                 Menu {
                     if codeFile.isMarkdown {
-                        Toggle(
-                            "Markdown Preview",
-                            isOn: $markdownPreviewEnabled
-                        )
+                        Button(markdownPreviewEnabled ? "Hide Markdown Preview" : "Show Markdown Preview") {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(1)) {
+                                Settings[\.textEditing].markdownPreviewEnabled.toggle()
+                            }
+                        }
                         .keyboardShortcut("R", modifiers: [.command, .shift])
                         Divider()
                     }

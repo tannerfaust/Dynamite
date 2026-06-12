@@ -32,6 +32,9 @@ collect_candidates() {
     [[ -d "$REPO_ROOT/.SourcePackages/checkouts/$package_name" ]] && \
         candidates+=("$REPO_ROOT/.SourcePackages/checkouts/$package_name")
 
+    [[ -d "$REPO_ROOT/.derivedData/SourcePackages/checkouts/$package_name" ]] && \
+        candidates+=("$REPO_ROOT/.derivedData/SourcePackages/checkouts/$package_name")
+
     while IFS= read -r dir; do
         candidates+=("$dir")
     done < <(find "$HOME/Library/Developer/Xcode/DerivedData" -maxdepth 4 \
@@ -50,7 +53,11 @@ is_textview_patched() {
         grep -q "Always remove a retired view" \
             "$checkout/Sources/CodeEditTextView/Utils/ViewReuseQueue.swift" 2>/dev/null &&
         grep -q "configureLayer" \
-            "$checkout/Sources/CodeEditTextView/TextLine/LineFragmentView.swift" 2>/dev/null
+            "$checkout/Sources/CodeEditTextView/TextLine/LineFragmentView.swift" 2>/dev/null &&
+        grep -q "fragmentLength = lineBreak - runRelativeStart" \
+            "$checkout/Sources/CodeEditTextView/TextLine/Typesetter/Typesetter.swift" 2>/dev/null &&
+        grep -q "test_wrappedFragmentCTLinesMatchFragmentRanges" \
+            "$checkout/Tests/CodeEditTextViewTests/TypesetterTests.swift" 2>/dev/null
 }
 
 is_sourceeditor_patched() {
@@ -68,6 +75,8 @@ is_sourceeditor_highlight_patched() {
         grep -q "maxSyncContentLength: Int = 100_000" \
             "$checkout/Sources/CodeEditSourceEditor/TreeSitter/TreeSitterClient.swift" 2>/dev/null &&
         grep -q "always shorter than the editor's content height" \
+            "$checkout/Sources/CodeEditSourceEditor/Minimap/MinimapView.swift" 2>/dev/null &&
+        grep -q "guard !isHidden, let point" \
             "$checkout/Sources/CodeEditSourceEditor/Minimap/MinimapView.swift" 2>/dev/null &&
         grep -q "visibleRangeProvider.visibleTextChanged()" \
             "$checkout/Sources/CodeEditSourceEditor/Highlighting/Highlighter.swift" 2>/dev/null &&

@@ -134,7 +134,7 @@ struct CodeFileView: View {
         }
         // This view needs to refresh when the codefile changes. The file URL is too stable.
         .id(ObjectIdentifier(codeFile))
-        .background(useThemeBackground ? Color(currentTheme.editor.background.color) : Color(NSColor.textBackgroundColor))
+        .background(useThemeBackground ? Color(hex: currentTheme.editor.background.color) : Color(NSColor.textBackgroundColor))
         .colorScheme(currentTheme.appearance == .dark ? .dark : .light)
         // minHeight zero fixes a bug where the app would freeze if the contents of the file are empty.
         .frame(minHeight: .zero, maxHeight: .infinity)
