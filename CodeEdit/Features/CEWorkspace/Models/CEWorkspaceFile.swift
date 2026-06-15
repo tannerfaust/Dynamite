@@ -268,10 +268,60 @@ final class CEWorkspaceFile: Codable, Comparable, Hashable, Identifiable, Editor
 
     /// Loads the ``fileDocument`` property with a new ``CodeFileDocument`` and registers it with the shared
     /// ``CodeEditDocumentController``.
+    ///
+    /// Performs a synchronous disk read on the calling thread. Prefer ``loadCodeFileAsync()`` anywhere
+    /// the main thread must stay responsive (eg. opening a file from the navigator).
     func loadCodeFile() throws {
         let codeFile = try CodeFileDocument(contentsOf: resolvedURL, ofType: contentType?.identifier ?? "")
         CodeEditDocumentController.shared.addDocument(codeFile)
         self.fileDocument = codeFile
+    }
+
+    /// Background queue used for reading documents off the main thread. Concurrent: reads of distinct
+    /// files don't need to wait on each other; per-file duplicate loads are prevented by
+    /// ``loadingCodeFileTask``.
+    private static let codeFileLoadQueue = DispatchQueue(
+        label: "app.dynamite.codeFileLoad",
+        qos: .userInitiated,
+        attributes: .concurrent
+    )
+
+    /// In-flight load started by ``loadCodeFileAsync()``. Main-actor confined; prevents duplicate
+    /// document loads when the same file is opened twice in quick succession.
+    private var loadingCodeFileTask: Task<Void, Error>?
+
+    /// Asynchronous variant of ``loadCodeFile()``: the disk read and string decoding run on a
+    /// background queue (`NSDocument` supports background reading — this mirrors AppKit's own
+    /// concurrent document opening), then registration and the ``fileDocument`` assignment happen
+    /// back on the main actor. Duplicate calls while a load is in flight await the same load.
+    @MainActor
+    func loadCodeFileAsync() async throws {
+        guard fileDocument == nil else { return }
+        if let loadingCodeFileTask {
+            try await loadingCodeFileTask.value
+            return
+        }
+        // Resolve these on the main actor: `resolvedURL` is lazy and not thread-safe.
+        let url = resolvedURL
+        let typeID = contentType?.identifier ?? ""
+        let task = Task { @MainActor [weak self] in
+            typealias DocumentContinuation = CheckedContinuation<CodeFileDocument, Error>
+            let codeFile = try await withCheckedThrowingContinuation { (continuation: DocumentContinuation) in
+                Self.codeFileLoadQueue.async {
+                    do {
+                        continuation.resume(returning: try CodeFileDocument(contentsOf: url, ofType: typeID))
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+            guard let self, self.fileDocument == nil else { return }
+            CodeEditDocumentController.shared.addDocument(codeFile)
+            self.fileDocument = codeFile
+        }
+        loadingCodeFileTask = task
+        defer { loadingCodeFileTask = nil }
+        try await task.value
     }
 
     // MARK: Statics

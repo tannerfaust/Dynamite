@@ -22,6 +22,22 @@ final class SourceControlManager: ObservableObject {
     let editorManager: EditorManager
     weak var fileManager: CEWorkspaceFileManager?
 
+    /// Files (by ``CEWorkspaceFile/id``) that currently have a non-nil `gitStatus` applied by
+    /// the status refresh. Tracks exactly which files need stale-status clearing so refreshes
+    /// don't sweep the entire flattened file index. Main-actor confined.
+    @MainActor var filesWithGitStatus: Set<String> = []
+
+    /// Debounce task for FS-event triggered status refreshes. Main-actor confined.
+    /// See ``scheduleStatusRefresh()``.
+    @MainActor var statusRefreshDebounceTask: Task<Void, Never>?
+
+    /// `true` while a serialized status refresh is running. Main-actor confined.
+    @MainActor var isStatusRefreshRunning = false
+
+    /// `true` if a refresh was requested while one was already running, so one more run follows.
+    /// Main-actor confined.
+    @MainActor var isStatusRefreshPending = false
+
     /// A list of changed files
     @Published var changedFiles: [GitChangedFile] = []
 

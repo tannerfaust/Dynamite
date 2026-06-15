@@ -9,47 +9,99 @@ import Foundation
 
 /// This extension handles the file system events triggered by changes in the root folder.
 extension CEWorkspaceFileManager {
+    /// Serial background queue for directory listing IO triggered by file system events.
+    /// Serial on purpose: event storms (builds, coding agents writing files) queue up behind each
+    /// other off the main thread instead of stacking main-thread stalls.
+    private static let fsEventIOQueue = DispatchQueue(label: "app.dynamite.fsevents-io", qos: .utility)
+
     /// Called by `fsEventStream` when an event occurs.
     ///
-    /// This method may be called on a background thread, but all work done by this function will be queued on the main
-    /// thread.
+    /// This method may be called on a background thread. Directory listing (disk IO) stays off the
+    /// main thread; only the cheap in-memory reconciliation of the file tree and the observer
+    /// notification run on the main thread, in a single hop per event batch.
     /// - Parameter events: An array of events that occurred.
     func fileSystemEventReceived(events: [DirectoryEventStream.Event]) {
-        DispatchQueue.main.async {
-            var files: Set<CEWorkspaceFile> = []
-            for event in events {
+        // Parse on the calling thread: collect the set of parent directories affected by
+        // structural events. Several events in one batch usually share a parent — deduplicate
+        // so each directory is listed and reconciled once per batch, not once per event.
+        var parentPaths: Set<String> = []
+        for event in events {
+            switch event.eventType {
+            case .changeInDirectory, .itemChangedOwner, .itemModified:
+                // Can be ignored for now, these I think not related to tree changes
+                continue
+            case .rootChanged:
+                // TODO: #1880 - Handle workspace root changing.
+                continue
+            case .itemCreated, .itemCloned, .itemRemoved, .itemRenamed:
                 // Event returns file/folder that was changed, but in tree we need to update it's parent
-                guard let parentUrl = URL(string: event.path, relativeTo: self.folderUrl)?.deletingLastPathComponent(),
-                      let parentFileItem = self.flattenedFileItems[parentUrl.path] else {
+                guard let parentUrl = URL(
+                    string: event.path,
+                    relativeTo: folderUrl
+                )?.deletingLastPathComponent() else {
                     continue
                 }
-
-                switch event.eventType {
-                case .changeInDirectory, .itemChangedOwner, .itemModified:
-                    // Can be ignored for now, these I think not related to tree changes
-                    continue
-                case .rootChanged:
-                    // TODO: #1880 - Handle workspace root changing.
-                    continue
-                case .itemCreated, .itemCloned, .itemRemoved, .itemRenamed:
-                    do {
-                        try self.rebuildFiles(fromItem: parentFileItem)
-                    } catch {
-                        // swiftlint:disable:next line_length
-                        self.logger.error("Failed to rebuild files for event: \(event.eventType.rawValue), path: \(event.path, privacy: .sensitive)")
-                    }
-                    files.insert(parentFileItem)
-                }
-            }
-            if !files.isEmpty {
-                self.notifyObservers(updatedItems: files)
-            }
-
-            if Settings.shared.preferences.sourceControl.general.sourceControlIsEnabled &&
-                Settings.shared.preferences.sourceControl.general.refreshStatusLocally {
-                self.handleGitEvents(events: events)
+                parentPaths.insert(parentUrl.path)
             }
         }
+
+        DispatchQueue.main.async {
+            // Snapshot which affected directories are cached. The file tree model is
+            // main-thread confined, so this read and the later reconciliation happen on main;
+            // `resolvedURL` is also resolved here because it is a lazy, non-thread-safe property.
+            let parents: [(file: CEWorkspaceFile, url: URL)] = parentPaths
+                .compactMap { self.flattenedFileItems[$0] }
+                .filter { self.childrenMap[$0.id] != nil }
+                .map { ($0, $0.resolvedURL) }
+
+            guard !parents.isEmpty else {
+                self.handleGitEventsIfEnabled(events: events)
+                return
+            }
+
+            self.listAndReconcile(parents: parents, events: events)
+        }
+    }
+
+    /// Lists the given directories on the background IO queue, then reconciles the file tree and
+    /// notifies observers in a single main-thread hop.
+    private func listAndReconcile(parents: [(file: CEWorkspaceFile, url: URL)], events: [DirectoryEventStream.Event]) {
+        Self.fsEventIOQueue.async {
+            // Disk IO off the main thread.
+            var listings: [(file: CEWorkspaceFile, contents: [URL])] = []
+            for parent in parents {
+                do {
+                    let contents = try FileManager.default.contentsOfDirectory(
+                        at: parent.url,
+                        includingPropertiesForKeys: nil
+                    )
+                    listings.append((parent.file, contents))
+                } catch {
+                    self.logger.error("Failed to list directory: \(parent.url.path, privacy: .sensitive)")
+                }
+            }
+
+            DispatchQueue.main.async {
+                var files: Set<CEWorkspaceFile> = []
+                for listing in listings {
+                    self.reconcileChildren(of: listing.file, withDirectoryContents: listing.contents)
+                    files.insert(listing.file)
+                }
+                if !files.isEmpty {
+                    self.notifyObservers(updatedItems: files)
+                }
+                self.handleGitEventsIfEnabled(events: events)
+            }
+        }
+    }
+
+    /// Forwards git-related events to the source control manager when source control is enabled.
+    private func handleGitEventsIfEnabled(events: [DirectoryEventStream.Event]) {
+        guard Settings.shared.preferences.sourceControl.general.sourceControlIsEnabled &&
+            Settings.shared.preferences.sourceControl.general.refreshStatusLocally else {
+            return
+        }
+        handleGitEvents(events: events)
     }
 
     func handleGitEvents(events: [DirectoryEventStream.Event]) {
@@ -86,11 +138,11 @@ extension CEWorkspaceFileManager {
             $0.path == "\(self.folderUrl.relativePath)/.git/config"
         })
 
-        // If changes were made to project OR files were staged, refresh changes
+        // If changes were made to project OR files were staged, refresh changes.
+        // Debounced + serialized: write storms (builds, agents) coalesce into one
+        // `git status` per window instead of spawning overlapping processes.
         if !notGitChanges.isEmpty || gitIndexChange != nil {
-            Task {
-                await self.sourceControlManager?.refreshAllChangedFiles()
-            }
+            sourceControlManager?.scheduleStatusRefresh()
         }
 
         // If changes were stashed, refresh stashed entries
@@ -147,20 +199,42 @@ extension CEWorkspaceFileManager {
             includingPropertiesForKeys: nil
         )
 
+        reconcileChildren(of: fileItem, withDirectoryContents: directoryContentsUrls)
+
+        if deep && childrenMap[fileItem.id] != nil {
+            for child in (childrenMap[fileItem.id] ?? []).compactMap({ flattenedFileItems[$0] }) {
+                try rebuildFiles(fromItem: child)
+            }
+        }
+    }
+
+    /// Reconciles the cached children of a directory with an already-fetched directory listing.
+    ///
+    /// In-memory only — no disk IO besides the `fileExists` check for new children — so callers can
+    /// perform the (slow) directory listing on a background queue and apply the result here on the
+    /// main thread. Set-based lookups keep this O(children) instead of O(children²).
+    /// - Parameters:
+    ///   - fileItem: The cached directory item to reconcile.
+    ///   - directoryContentsUrls: The directory's current contents as returned by `FileManager`.
+    func reconcileChildren(of fileItem: CEWorkspaceFile, withDirectoryContents directoryContentsUrls: [URL]) {
+        // Do not index directories that are not already loaded.
+        guard let cachedChildren = childrenMap[fileItem.id] else { return }
+
         // test for deleted children, and remove them from the index
         // Folders may or may not have slash at the end, this will normalize check
-        let directoryContentsUrlsRelativePaths = directoryContentsUrls.map({ $0.relativePath })
-        for (idx, oldURL) in (childrenMap[fileItem.id] ?? []).map({ URL(filePath: $0) }).enumerated().reversed()
+        let directoryContentsUrlsRelativePaths = Set(directoryContentsUrls.map({ $0.relativePath }))
+        for (idx, oldURL) in cachedChildren.map({ URL(filePath: $0) }).enumerated().reversed()
         where !directoryContentsUrlsRelativePaths.contains(oldURL.relativePath) {
             flattenedFileItems.removeValue(forKey: oldURL.relativePath)
             childrenMap[fileItem.id]?.remove(at: idx)
         }
 
         // test for new children, and index them
+        let existingChildren = Set(childrenMap[fileItem.id] ?? [])
         for newContent in directoryContentsUrls {
             // if the child has already been indexed, continue to the next item.
             guard !ignoredFilesAndFolders.contains(newContent.lastPathComponent) &&
-                    !(childrenMap[fileItem.id]?.contains(newContent.relativePath) ?? true) else { continue }
+                    !existingChildren.contains(newContent.relativePath) else { continue }
 
             if fileManager.fileExists(atPath: newContent.path) {
                 let newFileItem = createChild(newContent, forParent: fileItem)
@@ -173,12 +247,6 @@ extension CEWorkspaceFileManager {
             .map { URL(filePath: $0) }
             .sortItems(foldersOnTop: true)
             .map { $0.relativePath }
-
-        if deep && childrenMap[fileItem.id] != nil {
-            for child in (childrenMap[fileItem.id] ?? []).compactMap({ flattenedFileItems[$0] }) {
-                try rebuildFiles(fromItem: child)
-            }
-        }
     }
 
     /// Notify observers that an update occurred in the watched files.

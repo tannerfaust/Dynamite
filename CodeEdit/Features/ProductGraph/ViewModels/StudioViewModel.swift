@@ -6,7 +6,7 @@
 import SwiftUI
 import Combine
 
-/// State for the Product Studio Cockpit surface.
+/// State for the Product Studio surface.
 ///
 /// Owns the `ArtifactStore` for this workspace session and drives the Studio UI.
 /// Top-level Studio display mode.

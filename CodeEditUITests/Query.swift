@@ -60,6 +60,18 @@ enum Query {
             getRows(navigator).matching(NSPredicate(format: "selected = true"))
         }
 
+        static func expandRootIfNeeded(_ navigator: XCUIElement) {
+            guard getRows(navigator).count == 1 else { return }
+
+            let rootRow = getRows(navigator).firstMatch
+            guard rootRow.waitForExistence(timeout: 2.0) else { return }
+
+            let disclosure = disclosureIndicatorForRow(rootRow)
+            if disclosure.exists {
+                disclosure.click()
+            }
+        }
+
         static func getProjectNavigatorRow(fileTitle: String, index: Int = 0, _ navigator: XCUIElement) -> XCUIElement {
             return getRows(navigator)
                 .containing(.textField, identifier: "ProjectNavigatorTableViewCell-\(fileTitle)")
@@ -77,7 +89,7 @@ enum Query {
 
     enum TabBar {
         static func getTab(labeled title: String, _ tabBar: XCUIElement) -> XCUIElement {
-            tabBar.descendants(matching: .group).containing(NSPredicate(format: "value = %@", title)).firstMatch
+            tabBar.staticTexts[title]
         }
     }
 }

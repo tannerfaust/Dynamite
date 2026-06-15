@@ -39,19 +39,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
             for index in 0..<CommandLine.arguments.count {
                 if CommandLine.arguments[index] == "--open" && (index + 1) < CommandLine.arguments.count {
-                    let path = CommandLine.arguments[index+1]
-                    let url = URL(fileURLWithPath: path)
-
-                    CodeEditDocumentController.shared.reopenDocument(
-                        for: url,
-                        withContentsOf: url,
-                        display: true
-                    ) { document, _, _ in
-                        document?.windowControllers.first?.synchronizeWindowTitleWithDocumentName()
-                    }
-
+                    self.openWorkspace(at: CommandLine.arguments[index+1])
                     needToHandleOpen = false
                 }
+            }
+
+            if needToHandleOpen,
+               let path = CommandLine.arguments.dropFirst().first(where: { !$0.hasPrefix("-") }),
+               FileManager.default.fileExists(atPath: path) {
+                self.openWorkspace(at: path)
+                needToHandleOpen = false
             }
 
             if needToHandleOpen {
@@ -96,6 +93,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             CodeEditDocumentController.shared.openDocument(self)
         case .newDocument:
             CodeEditDocumentController.shared.newDocument(self)
+        }
+    }
+
+    private func openWorkspace(at path: String) {
+        let url = URL(fileURLWithPath: path)
+
+        CodeEditDocumentController.shared.reopenDocument(
+            for: url,
+            withContentsOf: url,
+            display: true
+        ) { document, _, _ in
+            document?.windowControllers.first?.synchronizeWindowTitleWithDocumentName()
         }
     }
 

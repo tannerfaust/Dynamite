@@ -11,6 +11,26 @@ final class AcknowledgementsViewModel: ObservableObject {
 
     @Published private(set) var acknowledgements: [AcknowledgementDependency]
 
+    private struct LicenseMetadata {
+        let name: String
+        let link: String
+    }
+
+    private static let licenseMetadata: [String: LicenseMetadata] = [
+        "swift-markdown-engine": LicenseMetadata(
+            name: "Apache-2.0",
+            link: "https://github.com/nodes-app/swift-markdown-engine/blob/main/LICENSE"
+        ),
+        "highlighterswift": LicenseMetadata(
+            name: "MIT + BSD-3-Clause",
+            link: "https://github.com/smittytone/HighlighterSwift/blob/main/LICENCE.md"
+        ),
+        "swiftmath": LicenseMetadata(
+            name: "MIT",
+            link: "https://github.com/mgriebling/SwiftMath/blob/main/LICENSE"
+        )
+    ]
+
     var indexedAcknowledgements: [(index: Int, acknowledgement: AcknowledgementDependency)] {
       return Array(zip(acknowledgements.indices, acknowledgements))
     }
@@ -36,11 +56,14 @@ final class AcknowledgementsViewModel: ObservableObject {
                     range: nil,
                     locale: nil
                 ) == nil {
+                    let license = Self.licenseMetadata[dependency.identity]
                     self.acknowledgements.append(
                         AcknowledgementDependency(
                             name: dependency.name,
                             repositoryLink: dependency.location,
-                            version: dependency.state.version ?? "-"
+                            version: dependency.state.version ?? "-",
+                            licenseName: license?.name,
+                            licenseLink: license?.link
                         )
                     )
                 }

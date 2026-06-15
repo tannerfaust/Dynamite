@@ -101,8 +101,13 @@ extension EditorManager {
             .compactMap({ fileManager.getFile($0.file.url.path(percentEncoded: false), createIfNotFound: true) })
             .map({ EditorInstance(workspace: workspace, file: $0) })
 
+        // Load restored documents off the main thread so workspace launch doesn't block on
+        // reading every previously-open file. Each editor shows a loading view until its
+        // document arrives via `fileDocumentPublisher`.
         for tab in resolvedTabs {
-            try tab.file.loadCodeFile()
+            Task { @MainActor [file = tab.file] in
+                try? await file.loadCodeFileAsync()
+            }
         }
 
         editor.workspace = workspace

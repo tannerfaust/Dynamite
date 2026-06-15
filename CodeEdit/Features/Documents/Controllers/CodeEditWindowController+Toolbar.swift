@@ -31,8 +31,13 @@ extension CodeEditWindowController {
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         var items: [NSToolbarItem.Identifier] = []
 
-        if FeatureFlags.cockpitView {
-            items += [.viewModeSwitcher, .flexibleSpace]
+        if FeatureFlags.cockpitView, viewMode == .studio {
+            // Product Studio is not an IDE. The build/task-runner (`activityViewer`), build
+            // notifications (`notificationItem`), and the technical IDE branch picker are all Ground
+            // Control concerns and read as cruft here. Studio keeps a quiet, empty titlebar and
+            // surfaces the branch in a compact, product-friendly chip in its own sidebar instead.
+            items += [.flexibleSpace]
+            return items
         }
 
         items += [
@@ -40,7 +45,14 @@ extension CodeEditWindowController {
             .flexibleSpace,
         ]
 
-        items += [.taskSidebarItem]
+        if #available(macOS 26, *) {
+            items += [.taskSidebarItem]
+        } else {
+            items += [
+                .stopTaskSidebarItem,
+                .startTaskSidebarItem,
+            ]
+        }
 
         items += [
             .sidebarTrackingSeparator,
@@ -84,15 +96,14 @@ extension CodeEditWindowController {
             .notificationItem,
         ]
 
-        if FeatureFlags.cockpitView {
-            items += [.viewModeSwitcher]
+        if #available(macOS 26, *) {
+            items += [.taskSidebarItem]
+        } else {
+            items += [
+                .startTaskSidebarItem,
+                .stopTaskSidebarItem,
+            ]
         }
-
-        items += [
-            .taskSidebarItem,
-            .startTaskSidebarItem,
-            .stopTaskSidebarItem,
-        ]
 
         return items
     }
@@ -112,6 +123,15 @@ extension CodeEditWindowController {
             window?.titleVisibility = .hidden
             setupToolbar()
         }
+    }
+
+    /// Rebuilds toolbar items when the app-level environment changes.
+    ///
+    /// Product Studio intentionally has a much quieter toolbar than Ground Control; the code
+    /// navigator, inspector, task runner, and tracking separators stay out of the product surface.
+    func refreshToolbarForViewMode() {
+        guard FeatureFlags.cockpitView, !toolbarCollapsed else { return }
+        setupToolbar()
     }
 
     // swiftlint:disable:next function_body_length cyclomatic_complexity
@@ -173,31 +193,26 @@ extension CodeEditWindowController {
             return activityViewerItem()
         case .notificationItem:
             return notificationItem()
-        case .viewModeSwitcher:
-            return viewModeSwitcherItem()
         case .taskSidebarItem:
-            return taskSidebarMenuItem()
+            guard #available(macOS 26, *) else {
+                fatalError("Unified task sidebar item used on pre-tahoe platform.")
+            }
+            guard let workspace,
+                  let stop = StopTaskToolbarItem(workspace: workspace) else {
+                return nil
+            }
+            let start = StartTaskToolbarItem(workspace: workspace)
+
+            let group = NSToolbarItemGroup(itemIdentifier: .taskSidebarItem)
+            group.isBordered = true
+            group.controlRepresentation = .expanded
+            group.selectionMode = .momentary
+            group.subitems = [stop, start]
+
+            return group
         default:
             return NSToolbarItem(itemIdentifier: itemIdentifier)
         }
-    }
-
-    private func taskSidebarMenuItem() -> NSToolbarItem? {
-        let toolbarItem = NSToolbarItem(itemIdentifier: .taskSidebarItem)
-        toolbarItem.visibilityPriority = .high
-        toolbarItem.toolTip = "Run or stop the selected task"
-
-        guard let workspace, let taskManager = workspace.taskManager else { return nil }
-
-        let view = NSHostingView(
-            rootView: TaskToolbarMenuButton(taskManager: taskManager)
-                .environmentObject(workspace)
-        )
-        toolbarItem.view = view
-        if #available(macOS 26, *) {
-            toolbarItem.isBordered = true
-        }
-        return toolbarItem
     }
 
     private func stopTaskSidebarItem() -> NSToolbarItem? {
@@ -234,18 +249,6 @@ extension CodeEditWindowController {
         let view = NSHostingView(rootView: NotificationToolbarItem().environmentObject(workspace))
         toolbarItem.view = view
         return toolbarItem
-    }
-
-    private func viewModeSwitcherItem() -> NSToolbarItem? {
-        guard FeatureFlags.cockpitView else { return nil }
-        let item = NSToolbarItem(itemIdentifier: .viewModeSwitcher)
-        item.visibilityPriority = .high
-        let view = NSHostingView(
-            rootView: ViewModeSwitcherToolbarView(windowController: self)
-        )
-        item.view = view
-        item.toolTip = "Switch between Cockpit and IDE views (⌘1 / ⌘2)"
-        return item
     }
 
     private func activityViewerItem() -> NSToolbarItem? {

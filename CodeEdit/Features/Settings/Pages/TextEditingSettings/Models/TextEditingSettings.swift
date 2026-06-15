@@ -27,6 +27,7 @@ extension SettingsData {
                 "Markdown Preview Font Size",
                 "Markdown Preview Font Weight",
                 "Markdown Preview",
+                "Swift Markdown Engine",
                 "Line Height",
                 "Letter Spacing",
                 "Autocomplete braces",
@@ -59,8 +60,18 @@ extension SettingsData {
         /// The proportional prose font to use in rendered Markdown preview/editing.
         var markdownPreviewFont: MarkdownPreviewFont = .init()
 
-        /// Show rendered Markdown preview for markdown files instead of opening each file in source mode.
-        var markdownPreviewEnabled: Bool = false
+        /// Which markdown editing/preview surface to use for markdown files.
+        var markdownPreviewMode: MarkdownPreviewMode = .source
+
+        /// Backward-compatible source/preview toggle for older call sites and saved settings.
+        var markdownPreviewEnabled: Bool {
+            get {
+                markdownPreviewMode.isPreview
+            }
+            set {
+                markdownPreviewMode = newValue ? .preview : .source
+            }
+        }
 
         /// A flag indicating whether type-over completion is enabled
         var enableTypeOverCompletion: Bool = true
@@ -130,10 +141,11 @@ extension SettingsData {
                 MarkdownPreviewFont.self,
                 forKey: .markdownPreviewFont
             ) ?? .init()
-            self.markdownPreviewEnabled = try container.decodeIfPresent(
-                Bool.self,
-                forKey: .markdownPreviewEnabled
-            ) ?? false
+            let legacyPreviewEnabled = try Self.decodeLegacyMarkdownPreviewEnabled(from: decoder)
+            self.markdownPreviewMode = try container.decodeIfPresent(
+                MarkdownPreviewMode.self,
+                forKey: .markdownPreviewMode
+            ) ?? (legacyPreviewEnabled == true ? .preview : .source)
             self.enableTypeOverCompletion = try container.decodeIfPresent(
                 Bool.self,
                 forKey: .enableTypeOverCompletion
@@ -228,7 +240,7 @@ extension SettingsData {
                 title: "Toggle Markdown Preview",
                 id: "prefs.text_editing.toggle_markdown_preview"
             ) {
-                Settings[\.textEditing].markdownPreviewEnabled.toggle()
+                Settings[\.textEditing].markdownPreviewMode = Settings[\.textEditing].markdownPreviewMode.next
             }
 
             mgr.addCommand(name: "Toggle Gutter", title: "Toggle Gutter", id: "prefs.text_editing.toggle_gutter") {
@@ -241,6 +253,28 @@ extension SettingsData {
                 id: "prefs.text_editing.toggle_folding_ribbon"
             ) {
                 Settings[\.textEditing].showFoldingRibbon.toggle()
+            }
+        }
+
+        private static func decodeLegacyMarkdownPreviewEnabled(from decoder: Decoder) throws -> Bool? {
+            let container = try decoder.container(keyedBy: LegacyCodingKey.self)
+            return try container.decodeIfPresent(Bool.self, forKey: .markdownPreviewEnabled)
+        }
+
+        private struct LegacyCodingKey: CodingKey {
+            static let markdownPreviewEnabled = LegacyCodingKey(stringValue: "markdownPreviewEnabled")!
+
+            let stringValue: String
+            let intValue: Int?
+
+            init?(stringValue: String) {
+                self.stringValue = stringValue
+                self.intValue = nil
+            }
+
+            init?(intValue: Int) {
+                self.stringValue = "\(intValue)"
+                self.intValue = intValue
             }
         }
 

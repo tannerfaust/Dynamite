@@ -94,6 +94,9 @@ struct ProjectNavigatorOutlineView: NSViewControllerRepresentable {
 
         func fileManagerUpdated(updatedItems: Set<CEWorkspaceFile>) {
             guard let outlineView = controller?.outlineView else { return }
+            // The on-disk tree changed: drop the memoized sorted-children cache so the reload below
+            // recomputes from live model state. O(1) clear; the reload re-sorts visible folders once.
+            controller?.invalidateChildrenCache()
             let selectedRows = outlineView.selectedRowIndexes.compactMap({ outlineView.item(atRow: $0) })
 
             // If some text view inside the outline view is first responder right now, push the update off
@@ -103,9 +106,19 @@ struct ProjectNavigatorOutlineView: NSViewControllerRepresentable {
                 && (outlineView.window?.firstResponder as? NSView)?.isDescendant(of: outlineView) == true {
                 controller?.shouldReloadAfterDoneEditing = true
             } else {
-                for item in updatedItems {
-                    outlineView.reloadItem(item, reloadChildren: true)
+                // Batch into one update pass, reload only the topmost updated ancestors
+                // (reloading an item with `reloadChildren: true` already covers its
+                // descendants), and skip rows that aren't visible — collapsed folders read
+                // live model state when expanded, so they need no reload now. Git status
+                // refreshes in big repos can pass thousands of items here; without this the
+                // per-item subtree reloads are the dominant sidebar stall.
+                outlineView.beginUpdates()
+                for item in updatedItems where !hasAncestor(of: item, in: updatedItems) {
+                    if outlineView.row(forItem: item) >= 0 {
+                        outlineView.reloadItem(item, reloadChildren: true)
+                    }
                 }
+                outlineView.endUpdates()
             }
 
             // Restore selected items where the files still exist.
@@ -113,6 +126,19 @@ struct ProjectNavigatorOutlineView: NSViewControllerRepresentable {
             controller?.shouldSendSelectionUpdate = false
             outlineView.selectRowIndexes(IndexSet(selectedIndexes), byExtendingSelection: false)
             controller?.shouldSendSelectionUpdate = true
+        }
+
+        /// Whether any ancestor of `item` is also in `items` (in which case reloading the
+        /// ancestor's subtree already covers `item`).
+        private func hasAncestor(of item: CEWorkspaceFile, in items: Set<CEWorkspaceFile>) -> Bool {
+            var parent = item.parent
+            while let current = parent {
+                if items.contains(current) {
+                    return true
+                }
+                parent = current.parent
+            }
+            return false
         }
 
         deinit {

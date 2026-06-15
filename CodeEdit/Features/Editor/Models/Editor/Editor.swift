@@ -264,6 +264,11 @@ final class Editor: ObservableObject, Identifiable {
         }
     }
 
+    /// Files at or below this size load synchronously on the main thread. Decoding a quarter-MB of
+    /// text is sub-frame, so the editor appears instantly with no loading-view flash and no async
+    /// scheduling overhead — the common case. Larger files load off-main (see ``openFile(item:)``).
+    private static let syncOpenByteLimit = 256 * 1024
+
     private func openFile(item: Tab) throws {
         // If this isn't attached to a workspace, loading a new NSDocument will cause a loose document we can't close
         guard item.file.fileDocument == nil else {
@@ -274,7 +279,27 @@ final class Editor: ObservableObject, Identifiable {
             throw EditorError.noWorkspaceAttached
         }
 
-        try item.file.loadCodeFile()
+        let byteSize = (try? item.file.url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+
+        if byteSize <= Self.syncOpenByteLimit {
+            // Small file: load synchronously so `fileDocument` is set before the view re-renders.
+            // The editor mounts directly — no `LoadingFileView` flash, no async hop.
+            do {
+                try item.file.loadCodeFile()
+            } catch {
+                logger.error("Error loading file \(item.file.name): \(error)")
+            }
+        } else {
+            // Large file: load off the main thread. The editor area shows a loading view and listens
+            // to `fileDocumentPublisher` until the document arrives, so the UI never freezes.
+            Task { @MainActor [weak self, file = item.file] in
+                do {
+                    try await file.loadCodeFileAsync()
+                } catch {
+                    self?.logger.error("Error loading file \(file.name): \(error)")
+                }
+            }
+        }
     }
 
     /// Check if tab can be closed

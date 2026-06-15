@@ -11,8 +11,16 @@ struct AcknowledgementDependency: Decodable {
     var name: String
     var repositoryLink: String
     var version: String
+    var licenseName: String? = nil
+    var licenseLink: String? = nil
+
     var repositoryURL: URL {
         URL(string: repositoryLink)!
+    }
+
+    var licenseURL: URL? {
+        guard let licenseLink else { return nil }
+        return URL(string: licenseLink)
     }
 }
 

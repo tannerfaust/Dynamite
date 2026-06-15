@@ -38,7 +38,7 @@ struct TextEditingSettingsView: View {
                 letterSpacing
             }
             Section {
-                markdownPreviewEnabled
+                markdownPreviewToggle
                 markdownPreviewFontSelector
                 markdownPreviewFontSizeSelector
                 markdownPreviewFontWeightSelector
@@ -59,8 +59,15 @@ struct TextEditingSettingsView: View {
 }
 
 private extension TextEditingSettingsView {
-    @ViewBuilder private var markdownPreviewEnabled: some View {
-        Toggle("Markdown Preview", isOn: $textEditing.markdownPreviewEnabled)
+    @ViewBuilder private var markdownPreviewToggle: some View {
+        Toggle("Markdown Preview", isOn: Binding(
+            get: {
+                textEditing.markdownPreviewEnabled
+            },
+            set: { newValue in
+                textEditing.markdownPreviewEnabled = newValue
+            }
+        ))
     }
 
     @ViewBuilder private var fontSelector: some View {

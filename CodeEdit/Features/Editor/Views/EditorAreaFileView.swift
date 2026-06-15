@@ -41,16 +41,10 @@ struct EditorAreaFileView: View {
     }
 
     var body: some View {
+        // No cursor handling here: the text view manages its own I-beam cursor rects,
+        // and pushing/popping NSCursor per hover event desyncs the cursor stack and
+        // wrongly applies the I-beam over non-text files.
         editorAreaFileView
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .onHover { hover in
-                DispatchQueue.main.async {
-                    if hover {
-                        NSCursor.iBeam.push()
-                    } else {
-                        NSCursor.pop()
-                    }
-                }
-            }
     }
 }

@@ -12,8 +12,8 @@ struct EditorTabBarTrailingAccessories: View {
     var wrapLinesToEditorWidth
     @AppSettings(\.textEditing.showMinimap)
     var showMinimap
-    @AppSettings(\.textEditing.markdownPreviewEnabled)
-    var markdownPreviewEnabled
+    @AppSettings(\.textEditing.markdownPreviewMode)
+    var markdownPreviewMode
 
     @Environment(\.splitEditor)
     var splitEditor
@@ -56,11 +56,7 @@ struct EditorTabBarTrailingAccessories: View {
             .overlay {
                 Menu {
                     if codeFile.isMarkdown {
-                        Button(markdownPreviewEnabled ? "Hide Markdown Preview" : "Show Markdown Preview") {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(1)) {
-                                Settings[\.textEditing].markdownPreviewEnabled.toggle()
-                            }
-                        }
+                        Toggle("Markdown Preview", isOn: markdownPreviewEnabled)
                         .keyboardShortcut("R", modifiers: [.command, .shift])
                         Divider()
                     }
@@ -80,6 +76,14 @@ struct EditorTabBarTrailingAccessories: View {
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
             }
+    }
+
+    private var markdownPreviewEnabled: Binding<Bool> {
+        Binding {
+            markdownPreviewMode.isPreview
+        } set: { newValue in
+            markdownPreviewMode = newValue ? .preview : .source
+        }
     }
 
     var splitviewButton: some View {

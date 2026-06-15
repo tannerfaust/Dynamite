@@ -18,10 +18,10 @@ enum WorkspaceStateKey: String {
 
     // MARK: - Shell (ADR-0006)
 
-    /// Last-used `ViewMode.rawValue` for this workspace; absence defaults to `.ide`.
+    /// Last-used `ViewMode.routeValue` for this workspace; absence defaults to Product Studio.
     case viewMode
-    /// Last selected Cockpit surface `id` (from `CockpitSurfaceRegistry`).
+    /// Last selected Product Studio surface `id`.
     case cockpitSelectedSurface
-    /// Last focused product-graph node `id` in the Cockpit view.
+    /// Last focused product-graph node `id` in Product Studio.
     case cockpitSelectedNode
 }

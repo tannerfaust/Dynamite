@@ -136,28 +136,67 @@ extension SourceControlManager {
         }
 
         var updatedStatusFor: Set<CEWorkspaceFile> = []
-        // Refresh status of file manager files
+        var newStatusKeys: Set<String> = []
+        // Refresh status of file manager files. Only files whose status actually changed are
+        // included in the observer notification, so the navigator doesn't reload rows whose
+        // badge is already correct.
         for changedFile in changedFiles {
             guard let file = fileManager.getFile(changedFile.ceFileKey) else {
                 continue
             }
+            newStatusKeys.insert(file.id)
             if file.gitStatus != changedFile.anyStatus() {
                 file.gitStatus = changedFile.anyStatus()
+                updatedStatusFor.insert(file)
             }
-            updatedStatusFor.insert(file)
         }
 
-        for (_, file) in fileManager.flattenedFileItems
-        where !updatedStatusFor.contains(file) && file.gitStatus != nil {
+        // Clear stale statuses. `filesWithGitStatus` records exactly which files have a status
+        // set, so this touches only those files instead of sweeping the entire file index.
+        for staleKey in filesWithGitStatus.subtracting(newStatusKeys) {
+            guard let file = fileManager.getFile(staleKey), file.gitStatus != nil else { continue }
             file.gitStatus = nil
             updatedStatusFor.insert(file)
         }
+        filesWithGitStatus = newStatusKeys
 
         if updatedStatusFor.isEmpty {
             return
         }
 
         fileManager.notifyObservers(updatedItems: updatedStatusFor)
+    }
+
+    /// Schedules a debounced, serialized ``refreshAllChangedFiles()``.
+    ///
+    /// FS-event storms (builds, coding agents writing files) call this many times per second;
+    /// the debounce coalesces them into at most one `git status` per window, and the serializer
+    /// guarantees refreshes never run concurrently — a request arriving mid-refresh queues
+    /// exactly one follow-up run so the final state always matches `git status`.
+    nonisolated func scheduleStatusRefresh() {
+        Task { @MainActor in
+            guard self.statusRefreshDebounceTask == nil else { return }
+            self.statusRefreshDebounceTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                self.statusRefreshDebounceTask = nil
+                guard !Task.isCancelled else { return }
+                await self.runSerializedStatusRefresh()
+            }
+        }
+    }
+
+    @MainActor
+    private func runSerializedStatusRefresh() async {
+        if isStatusRefreshRunning {
+            isStatusRefreshPending = true
+            return
+        }
+        isStatusRefreshRunning = true
+        defer { isStatusRefreshRunning = false }
+        repeat {
+            isStatusRefreshPending = false
+            await refreshAllChangedFiles()
+        } while isStatusRefreshPending
     }
 
     /// Refresh all changed files and refresh status in file manager

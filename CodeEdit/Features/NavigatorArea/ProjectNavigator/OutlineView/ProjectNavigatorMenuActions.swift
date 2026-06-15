@@ -281,5 +281,6 @@ extension ProjectNavigatorMenu {
     private func reloadData() {
         sender.outlineView.reloadData()
         sender.filteredContentChildren.removeAll()
+        sender.invalidateChildrenCache()
     }
 }

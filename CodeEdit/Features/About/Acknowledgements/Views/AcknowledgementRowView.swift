@@ -15,10 +15,27 @@ struct AcknowledgementRowView: View {
 
     var body: some View {
         HStack {
-            Text(acknowledgement.name)
-                .font(.body)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(acknowledgement.name)
+                    .font(.body)
+
+                if !detailText.isEmpty {
+                    Text(detailText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
 
             Spacer()
+
+            if let licenseURL = acknowledgement.licenseURL {
+                Button {
+                    openURL(licenseURL)
+                } label: {
+                    Text("License")
+                }
+                .buttonStyle(.link)
+            }
 
             Button {
                 openURL(acknowledgement.repositoryURL)
@@ -30,6 +47,15 @@ struct AcknowledgementRowView: View {
         }
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity)
+    }
+
+    private var detailText: String {
+        [
+            acknowledgement.version == "-" ? nil : acknowledgement.version,
+            acknowledgement.licenseName
+        ]
+            .compactMap { $0 }
+            .joined(separator: " | ")
     }
 }
 

@@ -9,35 +9,53 @@ import AppKit
 
 extension ProjectNavigatorViewController: NSOutlineViewDataSource {
     /// Retrieves the children of a given item for the outline view, applying the current filter if necessary.
+    ///
+    /// `NSOutlineView` calls `numberOfChildrenOfItem`/`child(ofItem:)` many times per layout pass —
+    /// for every visible row, and repeatedly during scrolling, expand/collapse, and window resize.
+    /// Computing + sorting on every call made those passes O(children² · log) per folder and was the
+    /// dominant cause of single-digit-fps animations in larger projects. We memoize the final, sorted
+    /// array per item in ``sortedChildrenCache`` so repeat queries are O(1) dictionary hits. The cache
+    /// is invalidated on structural change (``fileManagerUpdated``), filter/sort change
+    /// (``handleFilterChange``), and file mutations (menu actions) — never per frame.
     private func getOutlineViewItems(for item: CEWorkspaceFile) -> [CEWorkspaceFile] {
-        if let cachedChildren = filteredContentChildren[item] {
-            return cachedChildren
-                .sorted { lhs, rhs in
-                    workspace?.sortFoldersOnTop == true ? lhs.isFolder && !rhs.isFolder : lhs.name < rhs.name
-                }
+        if let cached = sortedChildrenCache[item] {
+            return cached
+        }
+        let computed = computeOutlineViewItems(for: item)
+        sortedChildrenCache[item] = computed
+        return computed
+    }
+
+    private func computeOutlineViewItems(for item: CEWorkspaceFile) -> [CEWorkspaceFile] {
+        // Folders force-shown by a filter match (see `saveAllContentChildren`) are pinned here.
+        if let forcedChildren = filteredContentChildren[item] {
+            return sortFiles(forcedChildren)
         }
 
-        if let workspace, let children = workspace.workspaceFileManager?.childrenOfFile(item) {
-            if !workspace.navigatorFilter.isEmpty || workspace.sourceControlFilter {
-                let filteredChildren = children.filter {
-                    fileSearchMatches(
-                        workspace.navigatorFilter,
-                        for: $0,
-                        sourceControlFilter: workspace.sourceControlFilter
-                    )
-                }
+        guard let workspace, let children = workspace.workspaceFileManager?.childrenOfFile(item) else {
+            return []
+        }
 
-                filteredContentChildren[item] = filteredChildren
-                return filteredChildren
+        if !workspace.navigatorFilter.isEmpty || workspace.sourceControlFilter {
+            let filteredChildren = children.filter {
+                fileSearchMatches(
+                    workspace.navigatorFilter,
+                    for: $0,
+                    sourceControlFilter: workspace.sourceControlFilter
+                )
             }
-
-            return children
-                .sorted { lhs, rhs in
-                    workspace.sortFoldersOnTop ? lhs.isFolder && !rhs.isFolder : lhs.name < rhs.name
-                }
+            filteredContentChildren[item] = filteredChildren
+            return sortFiles(filteredChildren)
         }
 
-        return []
+        return sortFiles(children)
+    }
+
+    private func sortFiles(_ files: [CEWorkspaceFile]) -> [CEWorkspaceFile] {
+        let foldersOnTop = workspace?.sortFoldersOnTop == true
+        return files.sorted { lhs, rhs in
+            foldersOnTop ? lhs.isFolder && !rhs.isFolder : lhs.name < rhs.name
+        }
     }
 
     func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {

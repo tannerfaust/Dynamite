@@ -78,7 +78,11 @@ final class Settings: ObservableObject {
     ///
     /// Points to `~/Library/Application Support/CodeEdit/`
     internal var baseURL: URL {
-        filemanager
+        if let override = ProcessInfo.processInfo.environment["CODEEDIT_SETTINGS_DIR"], !override.isEmpty {
+            return URL(fileURLWithPath: override, isDirectory: true)
+        }
+
+        return filemanager
             .homeDirectoryForCurrentUser
             .appending(path: "Library/Application Support/CodeEdit", directoryHint: .isDirectory)
     }

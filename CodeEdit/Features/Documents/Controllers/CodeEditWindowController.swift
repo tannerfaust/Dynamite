@@ -20,11 +20,11 @@ final class CodeEditWindowController: NSWindowController, NSToolbarDelegate, Obs
     @Published var prevUtilityAreaCollapsed: Bool?
     @Published var prevToolbarCollapsed: Bool?
 
-    /// Current view mode for this window. `.ide` is the default and the only mode in Phase A.
+    /// Current top-level environment for this window. Ground Control is the only mode in Phase A.
     ///
     /// Written exclusively by `ShellViewController.setViewMode(_:animated:)`. Toolbar and menu
     /// items observe this property to reflect the active mode.
-    @Published var viewMode: ViewMode = .ide
+    @Published var viewMode: ViewMode = .groundControl
 
     private var panelOpen = false
 
@@ -38,10 +38,10 @@ final class CodeEditWindowController: NSWindowController, NSToolbarDelegate, Obs
 
     internal var cancellables = [AnyCancellable]()
 
-    /// The IDE split view controller, accessed through the `ShellViewController` container.
+    /// The Ground Control split view controller, accessed through the `ShellViewController` container.
     ///
-    /// Returns `nil` in Phase B when in Cockpit mode and the IDE child hasn't been built yet,
-    /// though in practice the IDE child is always built first and retained indefinitely.
+    /// Returns `nil` only if the shell has not finished loading; Ground Control is always built
+    /// first because legacy CodeEdit actions still route through the split view controller.
     var splitViewController: CodeEditSplitViewController? {
         (contentViewController as? ShellViewController)?.ideViewController
     }
@@ -61,7 +61,7 @@ final class CodeEditWindowController: NSWindowController, NSToolbarDelegate, Obs
         }
 
         // Setting contentViewController triggers ShellViewController.viewDidLoad synchronously,
-        // which builds the IDE child and calls ideVC.view (loading ideVC too). By the time this
+        // which builds Ground Control and calls ideVC.view (loading ideVC too). By the time this
         // assignment returns, shellVC.ideViewController and its splitViewItems are populated.
         contentViewController = shellViewController
 
@@ -71,7 +71,7 @@ final class CodeEditWindowController: NSWindowController, NSToolbarDelegate, Obs
         guard let ideVC = shellViewController.ideViewController,
               let firstItem = ideVC.splitViewItems.first,
               let lastItem = ideVC.splitViewItems.last else {
-            fatalError("ShellViewController did not produce an IDE view controller.")
+            fatalError("ShellViewController did not produce a Ground Control view controller.")
         }
 
         observers = [
@@ -112,6 +112,30 @@ final class CodeEditWindowController: NSWindowController, NSToolbarDelegate, Obs
     func switchViewMode(to mode: ViewMode) {
         guard FeatureFlags.cockpitView else { return }
         (contentViewController as? ShellViewController)?.setViewMode(mode)
+    }
+
+    static func switchActiveWorkspaceViewMode(to mode: ViewMode) {
+        guard FeatureFlags.cockpitView else { return }
+        activeWorkspaceWindowController()?.switchViewMode(to: mode)
+    }
+
+    private static func activeWorkspaceWindowController() -> CodeEditWindowController? {
+        let candidateWindows = [NSApp.keyWindow, NSApp.mainWindow].compactMap { $0 } + NSApp.orderedWindows
+
+        for window in candidateWindows {
+            guard let controller = window.windowController as? CodeEditWindowController else { continue }
+            return controller
+        }
+
+        return nil
+    }
+
+    @IBAction func showProductStudio(_ sender: Any?) {
+        switchViewMode(to: .studio)
+    }
+
+    @IBAction func showGroundControl(_ sender: Any?) {
+        switchViewMode(to: .groundControl)
     }
 
     private func getSelectedCodeFile() -> CodeFileDocument? {

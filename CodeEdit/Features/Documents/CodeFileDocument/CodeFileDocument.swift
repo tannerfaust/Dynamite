@@ -63,9 +63,9 @@ final class CodeFileDocument: NSDocument, ObservableObject {
     /// Document-specific overridden line wrap preference.
     @Published var wrapLines: Bool?
 
-    /// Whether to show the live markdown (WYSIWYG) rendering instead of the raw editor.
-    /// Only meaningful for markdown documents. `nil`/`false` shows the raw source editor.
-    @Published var markdownPreview: Bool?
+    /// Optional per-document markdown rendering override.
+    /// Only meaningful for markdown documents. `nil` uses the global text editing setting.
+    @Published var markdownPreviewMode: MarkdownPreviewMode?
 
     /// Set up by ``LanguageServer``, conforms this type to ``LanguageServerDocument``.
     @Published var languageServerObjects: LanguageServerDocumentObjects<CodeFileDocument> = .init()

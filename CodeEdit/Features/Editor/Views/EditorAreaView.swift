@@ -194,8 +194,14 @@ struct EditorAreaView: View {
             }
         }
         .onChange(of: editor.selectedTab) { _, newValue in
+            // Always retarget the editor to the newly-selected tab. When the document is still
+            // loading (async open), reset `codeFile` to nil so the view shows `LoadingFileView`
+            // and subscribes to `fileDocumentPublisher`. Otherwise it keeps rendering the previous
+            // file's document while the tab bar shows the new tab — the "stale editor" bug.
             if let file = newValue?.file.fileDocument {
                 codeFile = { [weak file] in file }
+            } else {
+                codeFile = nil
             }
         }
     }

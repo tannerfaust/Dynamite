@@ -38,8 +38,8 @@ struct CodeFileView: View {
     var settingsFont
     @AppSettings(\.textEditing.markdownPreviewFont)
     var markdownPreviewFont
-    @AppSettings(\.textEditing.markdownPreviewEnabled)
-    var markdownPreviewEnabled
+    @AppSettings(\.textEditing.markdownPreviewMode)
+    var markdownPreviewMode
     @AppSettings(\.theme.useThemeBackground)
     var useThemeBackground
     @AppSettings(\.theme.matchAppearance)
@@ -68,8 +68,6 @@ struct CodeFileView: View {
     @EnvironmentObject var undoRegistration: UndoManagerRegistration
 
     @ObservedObject private var themeModel: ThemeModel = .shared
-
-    @State private var treeSitter = TreeSitterClient()
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -123,11 +121,27 @@ struct CodeFileView: View {
         MarkdownTheme.from(editor: currentTheme.editor, baseFont: markdownFont)
     }
 
+    private var effectiveMarkdownPreviewMode: MarkdownPreviewMode {
+        codeFile.markdownPreviewMode ?? markdownPreviewMode
+    }
+
+    private var markdownDocumentId: String {
+        codeFile.fileURL?.absoluteString ?? String(ObjectIdentifier(codeFile).hashValue)
+    }
+
+    private var markdownDocumentText: Binding<String> {
+        Binding {
+            codeFile.content?.string ?? ""
+        } set: { newText in
+            replaceDocumentText(newText)
+        }
+    }
+
     @ViewBuilder
     var body: some View {
         Group {
-            if codeFile.isMarkdown, markdownPreviewEnabled {
-                MarkdownPreviewView(codeFile: codeFile, theme: markdownTheme)
+            if codeFile.isMarkdown {
+                markdownEditor
             } else {
                 sourceEditor
             }
@@ -144,6 +158,35 @@ struct CodeFileView: View {
         .onChange(of: markdownPreviewFont) { _, newFontSetting in
             markdownFont = newFontSetting.current
         }
+    }
+
+    @ViewBuilder
+    private var markdownEditor: some View {
+        switch effectiveMarkdownPreviewMode {
+        case .source:
+            sourceEditor
+        case .preview:
+            MarkdownEngineEditorView(
+                text: markdownDocumentText,
+                theme: markdownTheme,
+                font: markdownFont,
+                documentId: markdownDocumentId,
+                contentInsets: edgeInsets,
+                overscrollPercent: overscroll.overscrollPercentage,
+                isEditable: isEditable
+            )
+        }
+    }
+
+    private func replaceDocumentText(_ newText: String) {
+        guard let storage = codeFile.content else {
+            codeFile.content = NSTextStorage(string: newText)
+            codeFile.updateChangeCount(.changeDone)
+            return
+        }
+        guard storage.string != newText else { return }
+        storage.replaceCharacters(in: NSRange(location: 0, length: storage.length), with: newText)
+        codeFile.updateChangeCount(.changeDone)
     }
 
     private var sourceEditor: some View {

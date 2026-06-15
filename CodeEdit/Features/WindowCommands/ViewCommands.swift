@@ -167,7 +167,8 @@ extension ViewCommands {
             Menu("Navigators", content: {
                 ForEach(Array(model.tabItems.prefix(9).enumerated()), id: \.element) { index, tab in
                     if FeatureFlags.cockpitView {
-                        // ⌘1/⌘2 are reserved for Cockpit/IDE mode switching (ADR-0006 §6).
+                        // ⌘1/⌘2 are reserved for Product Studio/Ground Control switching
+                        // (ADR-0006 §6).
                         // Navigator tabs move to ⌃⌘1–⌃⌘9 in Phase B so the keys never collide.
                         Button(tab.title) {
                             model.setNavigatorTab(tab: tab)
@@ -188,21 +189,19 @@ extension ViewCommands {
     }
 }
 
-// MARK: - Mode switcher commands (Phase B)
+// MARK: - Environment switcher commands
 
 extension ViewCommands {
-    /// ⌘1 / ⌘2 mode-switch commands — only registered when `FeatureFlags.cockpitView` is true.
+    /// ⌘1 / ⌘2 environment-switch commands — only registered when `FeatureFlags.cockpitView` is true.
     struct ModeSwitcherCommands: View {
-        @UpdatingWindowController var windowController: CodeEditWindowController?
-
         var body: some View {
-            Button("Show Cockpit") {
-                windowController?.switchViewMode(to: .cockpit)
+            Button("Show Product Studio") {
+                CodeEditWindowController.switchActiveWorkspaceViewMode(to: .studio)
             }
             .keyboardShortcut("1", modifiers: .command)
 
-            Button("Show IDE") {
-                windowController?.switchViewMode(to: .ide)
+            Button("Show Ground Control") {
+                CodeEditWindowController.switchActiveWorkspaceViewMode(to: .groundControl)
             }
             .keyboardShortcut("2", modifiers: .command)
         }

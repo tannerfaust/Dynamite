@@ -74,7 +74,7 @@ struct ArtifactEditorView: View {
             AIAssistToolbarView(
                 viewModel: assistViewModel,
                 artifact: draft,
-                currentSelection: { "" }  // TODO: wire real selection from MarkdownTextView
+                currentSelection: { "" }  // TODO: wire real selection from MarkdownEngine.
             )
             editorToolbar
             Divider()
@@ -123,7 +123,7 @@ struct ArtifactEditorView: View {
                 }
             )
         } else if editorMode == .preview {
-            ArtifactMarkdownEditorView(text: $draft.body, theme: theme)
+            ArtifactMarkdownEditorView(text: $draft.body, theme: theme, documentId: draft.id)
                 .onChange(of: draft.body) { _, _ in scheduleSave() }
         } else {
             rawMarkdownSourceEditor

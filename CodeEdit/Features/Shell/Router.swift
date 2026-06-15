@@ -8,14 +8,15 @@ import Foundation
 
 /// Parses, generates, and dispatches `dynamite://` routes for a workspace.
 ///
-/// Both view surfaces for a workspace (Cockpit and IDE) reach the same `Router` through
-/// `WorkspaceDocument.router`. Routing is always workspace-relative.
+/// Both top-level environments for a workspace (Product Studio and Ground Control) reach the same
+/// `Router` through `WorkspaceDocument.router`. Routing is always workspace-relative.
 ///
 /// ## Window targeting rule (ADR-0006 §3)
 /// When a route's natural target mode differs from the source window's current mode, the router
 /// first looks for another open window on the *same workspace* that is already in the target mode
-/// and routes there. This lets a Cockpit window (left) + IDE window (right) setup work naturally:
-/// clicking a citation in Cockpit jumps the IDE window to file/line without flipping the Cockpit.
+/// and routes there. This lets a Product Studio window (left) + Ground Control window (right) setup
+/// work naturally: clicking a citation in Studio jumps the Ground Control window to file/line
+/// without flipping the Studio.
 @MainActor
 final class Router {
     // MARK: - Properties
@@ -72,7 +73,7 @@ final class Router {
 
     nonisolated private static func parseMode(url: URL) -> DynamiteRoute? {
         let raw = String(url.path.dropFirst())
-        guard let mode = ViewMode(rawValue: raw) else { return nil }
+        guard let mode = ViewMode(legacyOrRouteValue: raw) else { return nil }
         return .mode(mode)
     }
 
@@ -105,7 +106,7 @@ final class Router {
 
         case .mode(let mode):
             components.host = "mode"
-            components.path = "/\(mode.rawValue)"
+            components.path = "/\(mode.routeValue)"
         }
 
         return components.url ?? URL(string: "dynamite://invalid")! // swiftlint:disable:this force_unwrapping
@@ -125,10 +126,10 @@ final class Router {
             target?.switchViewMode(to: mode)
 
         case .node(let id):
-            let target = windowController(preferring: .cockpit, from: sourceWindow)
-            target?.switchViewMode(to: .cockpit)
+            let target = windowController(preferring: .studio, from: sourceWindow)
+            target?.switchViewMode(to: .studio)
             target?.workspace?.addToWorkspaceState(key: .cockpitSelectedNode, value: id)
-            // Post async so the Cockpit child (built by switchViewMode above) has a runloop
+            // Post async so the Product Studio child (built by switchViewMode above) has a runloop
             // tick to set up its SwiftUI subscriptions before the focus event arrives.
             let workspaceURL = workspace?.fileURL
             DispatchQueue.main.async {
@@ -140,8 +141,8 @@ final class Router {
             }
 
         case .surface(let id):
-            let target = windowController(preferring: .cockpit, from: sourceWindow)
-            target?.switchViewMode(to: .cockpit)
+            let target = windowController(preferring: .studio, from: sourceWindow)
+            target?.switchViewMode(to: .studio)
             target?.workspace?.addToWorkspaceState(key: .cockpitSelectedSurface, value: id)
             let workspaceURL = workspace?.fileURL
             DispatchQueue.main.async {
@@ -153,18 +154,18 @@ final class Router {
             }
 
         case let .code(path, line, _):
-            let target = windowController(preferring: .ide, from: sourceWindow)
-            target?.switchViewMode(to: .ide)
+            let target = windowController(preferring: .groundControl, from: sourceWindow)
+            target?.switchViewMode(to: .groundControl)
             openFile(path: path, line: line, in: target)
 
         case .context(let path):
-            // In IDE view the inspector already surfaces product context from LinkIndex by path.
-            // In Cockpit, switch there so the user sees the context panel.
-            if let source = sourceWindow, source.viewMode == .ide {
+            // In Ground Control the inspector already surfaces product context from LinkIndex by path.
+            // In Product Studio, switch there so the user sees the context panel.
+            if let source = sourceWindow, source.viewMode == .groundControl {
                 _ = path // Inspector observes active editor; no explicit action needed here.
             } else {
-                let target = windowController(preferring: .cockpit, from: sourceWindow)
-                target?.switchViewMode(to: .cockpit)
+                let target = windowController(preferring: .studio, from: sourceWindow)
+                target?.switchViewMode(to: .studio)
             }
         }
     }
@@ -230,10 +231,12 @@ extension Notification.Name {
 
     /// Posted for a `dynamite://node/<id>` route. `userInfo["id"]` is the node id (`String`).
     ///
-    /// `CockpitRootView` observes it to switch to the Studio surface; `StudioViewModel`
+    /// `ProductStudioRootView` observes it to switch to the artifact workspace; `StudioViewModel`
     /// observes it to select the artifact.
+    /// Name kept as `cockpit` for compatibility with existing in-process subscribers.
     static let cockpitFocusNode = Notification.Name("dynamite.cockpit.focusNode")
 
     /// Posted for a `dynamite://surface/<id>` route. `userInfo["id"]` is the surface id (`String`).
+    /// Name kept as `cockpit` for compatibility with existing in-process subscribers.
     static let cockpitFocusSurface = Notification.Name("dynamite.cockpit.focusSurface")
 }

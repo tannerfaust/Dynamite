@@ -33,6 +33,31 @@ final class ProjectNavigatorViewController: NSViewController {
     }
 
     var filteredContentChildren: [CEWorkspaceFile: [CEWorkspaceFile]] = [:]
+
+    /// Memoized, already-sorted children per item, consumed by the outline view data source.
+    /// Cleared on any structural/filter/sort change via ``invalidateChildrenCache()``. See
+    /// `ProjectNavigatorViewController+NSOutlineViewDataSource` for why this exists.
+    var sortedChildrenCache: [CEWorkspaceFile: [CEWorkspaceFile]] = [:]
+
+    /// Drops the memoized sorted-children cache so the next data-source query recomputes. Cheap
+    /// (`removeAll`); call whenever the on-screen tree structure or ordering could have changed.
+    func invalidateChildrenCache() {
+        sortedChildrenCache.removeAll(keepingCapacity: true)
+    }
+
+    /// Full repopulation used when Ground Control is first revealed after having launched hidden.
+    /// While hidden the `NSOutlineView` never queried its data source (it cached "0 rows" and the
+    /// incremental `fileManagerUpdated` path only reloads already-visible rows), so the tree showed
+    /// blank. This reloads from live model state and re-expands the root folder.
+    func reloadProjectAfterReveal() {
+        guard let outlineView else { return }
+        invalidateChildrenCache()
+        outlineView.reloadData()
+        if let first = outlineView.item(atRow: 0) {
+            outlineView.expandItem(first)
+        }
+    }
+
     var expandedItems: Set<CEWorkspaceFile> = []
 
     weak var workspace: WorkspaceDocument?
@@ -135,6 +160,18 @@ final class ProjectNavigatorViewController: NSViewController {
         super.init(nibName: nil, bundle: nil)
     }
 
+    /// Self-heals the "blank file tree on first Ground Control reveal" case. When Ground Control is
+    /// built while hidden (the window restored into Product Studio), the `NSOutlineView` never
+    /// queries its data source, so it has zero rows even after the file manager loaded. The moment it
+    /// genuinely appears, repopulate it if it's empty but data exists. Race-free, unlike a one-shot
+    /// reveal notification (which can fire before SwiftUI instantiates this controller).
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        if let outlineView, outlineView.numberOfRows == 0, !content.isEmpty {
+            reloadProjectAfterReveal()
+        }
+    }
+
     deinit {
         outlineView?.removeFromSuperview()
         scrollView?.removeFromSuperview()
@@ -218,6 +255,7 @@ final class ProjectNavigatorViewController: NSViewController {
 
     func handleFilterChange() {
         filteredContentChildren.removeAll()
+        invalidateChildrenCache()
         outlineView.reloadData()
 
         guard let workspace else { return }

@@ -106,7 +106,7 @@ public final class LinkIndexManager: ObservableObject {
                 kind: kind,
                 status: status,
                 title: parsed.title,
-                path: fileURL.path.replacingOccurrences(of: workspaceURL.path + "/", with: ""),
+                path: workspaceRelativePath(for: fileURL),
                 mtime: mtime,
                 size: size,
                 contentSHA: sha,
@@ -200,12 +200,17 @@ public final class LinkIndexManager: ObservableObject {
     /// Used by `FileSystemTableViewCell` for the navigator kind badge; hits the
     /// SQLite WAL pool which is fast for single PK-indexed reads.
     public func cachedKind(for absolutePath: String) -> String? {
-        let relativePath = absolutePath.hasPrefix(workspaceURL.path + "/")
-            ? String(absolutePath.dropFirst(workspaceURL.path.count + 1))
-            : absolutePath
+        let relativePath = workspaceRelativePath(for: URL(fileURLWithPath: absolutePath))
         return try? database.dbWriter.read { db in
             try String.fetchOne(db, sql: "SELECT kind FROM nodes WHERE path = ?", arguments: [relativePath])
         }
+    }
+
+    private func workspaceRelativePath(for url: URL) -> String {
+        let rootPath = workspaceURL.standardizedFileURL.resolvingSymlinksInPath().path
+        let filePath = url.standardizedFileURL.resolvingSymlinksInPath().path
+        guard filePath.hasPrefix(rootPath + "/") else { return filePath }
+        return String(filePath.dropFirst(rootPath.count + 1))
     }
 
     private func sha256(_ string: String) -> String {

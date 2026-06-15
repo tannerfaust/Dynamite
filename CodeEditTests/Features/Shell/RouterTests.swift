@@ -1,4 +1,3 @@
-import SwiftUI
 import XCTest
 @testable import CodeEdit
 
@@ -47,16 +46,28 @@ final class RouterTests: XCTestCase {
         XCTAssertEqual(route, .context(path: "Sources/Foo.swift"))
     }
 
-    func testParseModeRouteCockpit() {
+    func testParseModeRouteLegacyCockpit() {
         let url = URL(string: "dynamite://mode/cockpit")!
         let route = Router.parse(url: url)
-        XCTAssertEqual(route, .mode(.cockpit))
+        XCTAssertEqual(route, .mode(.studio))
     }
 
-    func testParseModeRouteIDE() {
+    func testParseModeRouteLegacyIDE() {
         let url = URL(string: "dynamite://mode/ide")!
         let route = Router.parse(url: url)
-        XCTAssertEqual(route, .mode(.ide))
+        XCTAssertEqual(route, .mode(.groundControl))
+    }
+
+    func testParseModeRouteStudio() {
+        let url = URL(string: "dynamite://mode/studio")!
+        let route = Router.parse(url: url)
+        XCTAssertEqual(route, .mode(.studio))
+    }
+
+    func testParseModeRouteGroundControl() {
+        let url = URL(string: "dynamite://mode/ground-control")!
+        let route = Router.parse(url: url)
+        XCTAssertEqual(route, .mode(.groundControl))
     }
 
     // MARK: - parse: invalid inputs
@@ -134,14 +145,14 @@ final class RouterTests: XCTestCase {
         XCTAssertEqual(Router.parse(url: url), route)
     }
 
-    func testURLRoundTripModeCockpit() {
-        let route = DynamiteRoute.mode(.cockpit)
+    func testURLRoundTripModeStudio() {
+        let route = DynamiteRoute.mode(.studio)
         let url = Router.url(for: route)
         XCTAssertEqual(Router.parse(url: url), route)
     }
 
-    func testURLRoundTripModeIDE() {
-        let route = DynamiteRoute.mode(.ide)
+    func testURLRoundTripModeGroundControl() {
+        let route = DynamiteRoute.mode(.groundControl)
         let url = Router.url(for: route)
         XCTAssertEqual(Router.parse(url: url), route)
     }
@@ -170,51 +181,18 @@ final class RouterTests: XCTestCase {
     // MARK: - ViewMode
 
     func testViewModeRawValues() {
-        XCTAssertEqual(ViewMode.cockpit.rawValue, "cockpit")
-        XCTAssertEqual(ViewMode.ide.rawValue, "ide")
+        XCTAssertEqual(ViewMode.studio.rawValue, "cockpit")
+        XCTAssertEqual(ViewMode.groundControl.rawValue, "ide")
     }
 
     func testViewModeRoundTripFromRawValue() {
-        XCTAssertEqual(ViewMode(rawValue: "cockpit"), .cockpit)
-        XCTAssertEqual(ViewMode(rawValue: "ide"), .ide)
+        XCTAssertEqual(ViewMode(rawValue: "cockpit"), .studio)
+        XCTAssertEqual(ViewMode(rawValue: "ide"), .groundControl)
         XCTAssertNil(ViewMode(rawValue: "unknown"))
     }
 
-    // MARK: - CockpitSurfaceRegistry
-
-    func testRegistryRegisterAndUnregister() {
-        let registry = CockpitSurfaceRegistry()
-        XCTAssertTrue(registry.surfaces.isEmpty)
-
-        let stub = StubSurface(id: "test-surface", title: "Test", systemImage: "circle")
-        registry.register(stub)
-        XCTAssertEqual(registry.surfaces.count, 1)
-        XCTAssertEqual(registry.surfaces.first?.id, "test-surface")
-
-        registry.unregister(id: "test-surface")
-        XCTAssertTrue(registry.surfaces.isEmpty)
+    func testViewModeRouteValues() {
+        XCTAssertEqual(ViewMode.studio.routeValue, "studio")
+        XCTAssertEqual(ViewMode.groundControl.routeValue, "ground-control")
     }
-
-    func testRegistryNoDuplicates() {
-        let registry = CockpitSurfaceRegistry()
-        let stub = StubSurface(id: "dup", title: "Dup", systemImage: "circle")
-        registry.register(stub)
-        registry.register(stub)
-        XCTAssertEqual(registry.surfaces.count, 1)
-    }
-
-    func testRegistryUnregisterUnknownIDIsNoop() {
-        let registry = CockpitSurfaceRegistry()
-        registry.unregister(id: "nonexistent") // must not crash
-        XCTAssertTrue(registry.surfaces.isEmpty)
-    }
-}
-
-// MARK: - Test helpers
-
-private struct StubSurface: CockpitSurface {
-    let id: String
-    let title: String
-    let systemImage: String
-    var body: AnyView { AnyView(EmptyView()) }
 }
