@@ -134,7 +134,9 @@ enum StudioMotion {
 /// `.regularMaterial` for proper dark-surface opacity.
 private struct StudioGlass<S: InsettableShape>: ViewModifier {
     let shape: S
-    @Environment(\.colorScheme) private var colorScheme
+
+    @Environment(\.colorScheme)
+    private var colorScheme
 
     @ViewBuilder
     func body(content: Content) -> some View {
@@ -171,8 +173,12 @@ struct StudioCard: ViewModifier {
             .background(shape.fill(StudioTheme.cardFill))
             .overlay(shape.fill(StudioTheme.hover).opacity(emphasized ? 1 : 0))
             .overlay(shape.strokeBorder(StudioTheme.hairline, lineWidth: 1))
-            .shadow(color: StudioTheme.shadow, radius: emphasized ? 14 : 8,
-                    x: 0, y: emphasized ? 5 : 3)
+            .shadow(
+                color: StudioTheme.shadow,
+                radius: emphasized ? 14 : 8,
+                x: 0,
+                y: emphasized ? 5 : 3
+            )
     }
 }
 
