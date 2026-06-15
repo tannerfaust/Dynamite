@@ -136,15 +136,24 @@ private struct StudioGlass<S: InsettableShape>: ViewModifier {
     let shape: S
     @Environment(\.colorScheme) private var colorScheme
 
+    @ViewBuilder
     func body(content: Content) -> some View {
+        #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             content.glassEffect(.regular, in: shape)
         } else {
-            let material: Material = colorScheme == .dark ? .regularMaterial : .thinMaterial
-            content
-                .background(material, in: shape)
-                .overlay(shape.strokeBorder(StudioTheme.hairline, lineWidth: 1))
+            materialFallback(content)
         }
+        #else
+        materialFallback(content)
+        #endif
+    }
+
+    private func materialFallback(_ content: Content) -> some View {
+        let material: Material = colorScheme == .dark ? .regularMaterial : .thinMaterial
+        return content
+            .background(material, in: shape)
+            .overlay(shape.strokeBorder(StudioTheme.hairline, lineWidth: 1))
     }
 }
 
