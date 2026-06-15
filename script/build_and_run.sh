@@ -12,7 +12,10 @@ SOURCE_PACKAGES="$ROOT_DIR/.SourcePackages"
 APP_BUNDLE="$DERIVED_DATA/Build/Products/$CONFIGURATION/$APP_NAME.app"
 APP_EXECUTABLE="$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 BUNDLE_ID="app.codeedit.Dynamite"
-STALE_APPLICATIONS_APP="/Applications/$APP_NAME.app"
+APPLICATIONS_APP="/Applications/$APP_NAME.app"
+USER_APPLICATIONS_APP="$HOME/Applications/$APP_NAME.app"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
+STALE_APP_ARCHIVE="$DERIVED_DATA/StaleApps"
 
 stop_existing_app() {
   local pids
@@ -38,12 +41,61 @@ stop_existing_app() {
   pkill -9 -x "$APP_NAME" >/dev/null 2>&1 || true
 }
 
-warn_about_stale_app_copy() {
-  if [[ -d "$STALE_APPLICATIONS_APP" ]]; then
-    echo "warning: $STALE_APPLICATIONS_APP exists and is not the branch build." >&2
-    echo "warning: do not use Finder, open -a $APP_NAME, or $STALE_APPLICATIONS_APP for branch testing." >&2
-    echo "warning: this script launches $APP_BUNDLE" >&2
+unregister_app() {
+  local app_path="$1"
+  if [[ -e "$app_path" || -L "$app_path" ]]; then
+    "$LSREGISTER" -u "$app_path" >/dev/null 2>&1 || true
   fi
+}
+
+archive_stale_app() {
+  local app_path="$1"
+  local archive_path
+
+  if [[ ! -e "$app_path" && ! -L "$app_path" ]]; then
+    return
+  fi
+
+  if [[ "$(cd "$(dirname "$app_path")" && pwd -P)/$(basename "$app_path")" == "$APP_BUNDLE" ]]; then
+    return
+  fi
+
+  unregister_app "$app_path"
+
+  if [[ -L "$app_path" ]]; then
+    rm -f "$app_path"
+    return
+  fi
+
+  mkdir -p "$STALE_APP_ARCHIVE"
+  archive_path="$STALE_APP_ARCHIVE/$(basename "$app_path").$(date +%Y%m%d-%H%M%S)"
+  echo "Archiving stale $APP_NAME bundle: $app_path -> $archive_path"
+  mv "$app_path" "$archive_path"
+}
+
+normalize_launch_targets() {
+  local global_derived_data="$HOME/Library/Developer/Xcode/DerivedData"
+
+  archive_stale_app "$APPLICATIONS_APP"
+  archive_stale_app "$USER_APPLICATIONS_APP"
+
+  if [[ -d "$global_derived_data" ]]; then
+    while IFS= read -r app_path; do
+      archive_stale_app "$app_path"
+    done < <(
+      find "$global_derived_data" \
+        -path "*/Build/Products/$CONFIGURATION/$APP_NAME.app" \
+        -type d \
+        -prune \
+        -print 2>/dev/null || true
+    )
+  fi
+
+  ln -s "$APP_BUNDLE" "$APPLICATIONS_APP"
+  "$LSREGISTER" -f -R -trusted "$APP_BUNDLE" >/dev/null 2>&1 || true
+  "$LSREGISTER" -f -R -trusted "$APPLICATIONS_APP" >/dev/null 2>&1 || true
+
+  echo "$APPLICATIONS_APP -> $(readlink "$APPLICATIONS_APP")"
 }
 
 build_app() {
@@ -65,7 +117,7 @@ build_app() {
 }
 
 open_app() {
-  /usr/bin/open -n "$APP_BUNDLE" --args "$ROOT_DIR"
+  /usr/bin/open -n "$APP_BUNDLE" --args --open "$ROOT_DIR"
 }
 
 verify_running_app() {
@@ -100,8 +152,8 @@ verify_running_app() {
 }
 
 stop_existing_app
-warn_about_stale_app_copy
 build_app
+normalize_launch_targets
 
 case "$MODE" in
   run)
