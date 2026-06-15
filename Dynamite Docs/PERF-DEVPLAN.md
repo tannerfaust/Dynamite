@@ -1,206 +1,135 @@
 # Performance Audit & Development Plan — IDE Side
 
-> Date: 2026-06-11. Scope: IDE-side performance and the four reported bugs. Cockpit/product layer intentionally out of scope. Each task below is **one prompt for one AI model**, with the model chosen for token economy. Tasks are ordered; respect the dependency notes.
+> Updated: 2026-06-13 (branch `IDE-optimisation`). Supersedes the 2026-06-11 plan, which was never executed; this revision re-audits the codebase, records what has now been **fixed directly on this branch**, and re-scopes the remaining work. Scope: IDE-side performance, reliability, and structural code health. Cockpit/product layer out of scope. Each task in Part 3 is **one prompt for one AI model**; GPT 5.5 (any thinking effort) is now a first-class choice alongside Composer, Sonnet, Gemini (Antigravity), Opus, and Fable.
 
 ---
 
-## Part 1 — Audit findings
+## Part 1 — Landed on `IDE-optimisation` (2026-06-13)
 
-### F1. The patch system is the root cause of bugs #2 and #3 still being visible
+The following structural fixes are implemented, build clean, lint clean, `CEWorkspaceFileManagerUnitTests` green, app launch verified via `./script/build_and_run.sh --verify`. Do **not** re-do these; review them.
 
-The repo already diagnosed and patched the two markdown bugs (`patches/README.md`):
+| # | Fix | Files | What changed |
+|---|-----|-------|--------------|
+| L1 | **Async file open** | `CEWorkspaceFile.swift`, `Editor.swift` | `loadCodeFileAsync()`: disk read + decode on a background queue, document registration back on main, in-flight task guard against double-opens. `Editor.openFile` now never blocks the main thread; the existing `LoadingFileView` + `fileDocumentPublisher` path shows progress. |
+| L2 | **Async state restoration** | `EditorLayout+StateRestoration.swift` | Restored tabs no longer each do a synchronous read on the main thread during workspace launch — previously launch blocked on reading *every* previously-open file. |
+| L3 | **FSEvents pipeline off main** | `CEWorkspaceFileManager+DirectoryEvents.swift` | Event parsing on the FSEvents thread; affected parent dirs **deduplicated per batch** (was: one full rebuild per event, even for the same dir); directory listing (disk IO) on a serial background queue; only the cheap in-memory reconcile + one `notifyObservers` per batch on main. |
+| L4 | **O(n²) → O(n) child diff** | same file | `reconcileChildren(of:withDirectoryContents:)` extracted from `rebuildFiles`, set-based lookups instead of `Array.contains` in loops. `rebuildFiles` keeps its signature for the FileManagement callers. |
+| L5 | **Git status debounce + serialize + scoped sweep** | `SourceControlManager.swift`, `+GitClient.swift`, `+DirectoryEvents.swift` | FS-event refreshes go through `scheduleStatusRefresh()`: 500 ms trailing-edge debounce, never-concurrent serializer with a single pending re-run (final state always matches `git status`). `refreshStatusInFileManager` no longer sweeps **all** of `flattenedFileItems` — a `filesWithGitStatus` index tracks exactly which files have a badge — and only files whose status **actually changed** are sent to observers (was: every changed file, every refresh). |
+| L6 | **Batched navigator reloads** | `ProjectNavigatorOutlineView.swift` | One `beginUpdates()/endUpdates()` pass; reload only **topmost** updated ancestors (subtree reloads cover descendants); skip rows not visible (collapsed folders read live model state on expand). Was: one `reloadItem(_, reloadChildren: true)` per item — thousands per git refresh in a big repo. |
+| L7 | **Markdown keystroke mirror is incremental** | `MarkdownPreviewView.swift` | `handleEdit` was copying the **entire document string** out of the text view, comparing O(n), and replacing the whole doc storage per keystroke. Now mirrors only the edited range (NSTextStorage edited-range semantics), with an O(1) length check + full-resync fallback if the mirrors ever diverge. |
+| L8 | **Dead code removed (~1,060 lines)** | `RenderedMarkdownView/Parser/Models.swift` + its test | Entire alternate markdown rendering stack was compiled but referenced by nothing. Also: unused duplicate `TreeSitterClient` `@State` in `CodeFileView` (was allocated on every struct init), and the `.onHover` `NSCursor.push/pop` hack in `EditorAreaFileView` (text view manages its own cursor rects; the hack desynced the cursor stack and applied I-beam over images/PDFs). |
 
-- **Word duplicated across wrapped lines** ("ghost" text) and the **unclickable right edge** are one upstream bug in **CodeEditTextView 0.12.1** `ViewReuseQueue`: retired line-fragment views were kept in the view hierarchy as hidden subviews and resurface, rendering on top of the current layout and eating hit-tests. Reproduces on pristine upstream. Upstream's latest release is *still* 0.12.1 (checked 2026-06-11) — no upstream fix exists.
-- The fix exists in `patches/codeedittextview-resize-perf.patch` and **is applied** to `.SourcePackages/checkouts/CodeEditTextView` (verified: `ViewReuseQueue.swift` removes retired views; `LineFragmentView` has per-fragment layers; `FastID` present).
+### Re-audit notes (what the 2026-06-11 plan got stale on)
 
-**Conclusion:** since the bugs still appear at runtime, the running binary is almost certainly built from an **unpatched** package copy (Xcode resolves packages into DerivedData; "Reset Package Caches"/DerivedData wipes silently restore broken upstream sources). Patch-on-checkout is structurally fragile. The fix is to **vendor** the two packages as local Swift packages with the patches baked in (the patches README itself recommends this). → Tasks T0.1, T0.2, T1.1.
-
-### F2. Custom WYSIWYG markdown editor (Dynamite code) has its own correctness + perf bugs
-
-`CodeEdit/Features/Editor/MarkdownEditor/` (used when Markdown Preview ⇧⌘R is on):
-
-- `MarkdownEditorView.makeNSView` hardcodes `width: 600` for `MarkdownTextView`; the text view does not reliably track the clip-view width → **dead, unclickable region to the right** of the 600pt column.
-- `MarkdownTextView.applyStyling()` runs on **every keystroke and every caret move** (`didChangeText` + `setSelectedRanges`), and does: `setAttributes` over the **entire document**, a regex pass over **every line** (`MarkdownSyntaxStyler.applyStyles`), then `invalidateGlyphs(forCharacterRange: fullRange)`. O(document) per keystroke; on large docs this is the lag, and glyph invalidation without matching layout invalidation is a second plausible source of duplicated/ghost line rendering in TextKit 1.
-- Every keystroke is also mirrored synchronously into a second `NSTextStorage` (the `CodeFileDocument` content) — double work per keystroke.
-
-### F3. Tab switching / file open is synchronous and rebuilds the world (inherited)
-
-- `Editor.openFile` → `CEWorkspaceFile.loadCodeFile()` → `CodeFileDocument(contentsOf:)` — **synchronous file read on the main thread** on every click in the navigator.
-- Tab switch swaps `EditorAreaFileView(editorInstance:)` identity → SwiftUI **tears down and rebuilds the entire editor** (`CodeFileView` → new `TextViewController`, full text layout, full Tree-sitter re-parse). No per-tab editor caching (Xcode keeps these alive).
-- `CodeFileView` allocates **two** `TreeSitterClient` instances per init (`treeSitterClient` and unused duplicate `treeSitter`) — and SwiftUI `@State` initial values are computed on *every* init of the struct, i.e. on every parent body evaluation.
-- `CodeFileView` observes ~20 separate `@AppSettings` keys; any settings write invalidates every open editor.
-- `EditorAreaFileView.onHover` pushes/pops `NSCursor` via `DispatchQueue.main.async` per hover event.
-
-### F4. Big-project lag: FSEvents → main-thread IO → outline-view reload storms (inherited)
-
-`CEWorkspaceFileManager+DirectoryEvents.swift` / `SourceControlManager+GitClient.swift` / `ProjectNavigatorOutlineView.swift`:
-
-- `fileSystemEventReceived` does **all** work on the main thread: `FileManager.contentsOfDirectory` (sync IO), child diffing, and sorting, per event batch. With an agent (Claude Code/Codex) writing files or a build running, FSEvents storms translate directly into main-thread stalls — this is the "big project = laggy animations, sidebar, resizing" feel.
-- `rebuildFiles` is O(children²): `Array.contains` inside loops over directory contents.
-- **Every** non-`.git` file change triggers `refreshAllChangedFiles()` → spawns `git status` → `refreshStatusInFileManager()` iterates **all** of `flattenedFileItems` (entire indexed tree) and then calls `notifyObservers` with the full updated set → `fileManagerUpdated` calls `outlineView.reloadItem($0, reloadChildren: true)` **per item** on the main thread. In a large repo this is thousands of row reloads per FS batch.
-- Settings observers (`iconColor`, `rowHeight`) call full `outlineView.reloadData()`.
-
-### F5. Resize/animation work already done — keep it, verify it
-
-The app-side resize fixes (hosting-controller `sizingOptions = []`, terminal grid resize throttling, jump-bar/tab-bar animation fixes) and the package patches (FastID, async highlight init, 100KB sync-parse threshold) are good engineering and address the resize-stutter class. They only fully count once the build provably contains them (T0.1) and survive package resets (T0.2).
-
-### Out of scope (per instructions)
-
-Run/play-button surfaces (`Features/Tasks` UI), Cockpit/product layer, anything slated for deletion.
+- The markdown editor was partially rewritten since the old plan: `MarkdownTextView` now **already** does incremental paragraph restyling with paired glyph+layout invalidation (full-document restyle only when a fence marker is edited). Old tasks T1.2/T1.3 are **done/obsolete**; the hardcoded-600pt dead zone is fixed by a clip-view frame observer.
+- All editor-package patch checkouts (repo `.SourcePackages`, `.derivedData`, global DerivedData) verified patched on 2026-06-13. The patch system itself remains the structural liability → V1.
+- Old T1.6 (init hygiene/cursor) landed above (L8). Old T2.1–T2.4 landed (L3–L6). Old T1.4 landed (L1/L2).
 
 ---
 
-## Part 2 — Development plan
+## Part 2 — Remaining audit findings (current, 2026-06-13)
 
-One task = one prompt = one model. Acceptance criteria are part of each prompt. Every task must end with: build passes, SwiftLint clean, no new violations.
+### F1. Patch-on-checkout is still the root structural risk *(unchanged, highest priority)*
+Editor correctness/perf fixes (ghost-text `ViewReuseQueue` fix, typesetter forward-progress hang fix, FastID, 100 KB sync-parse threshold, minimap height guard) live as patches applied to SPM checkouts. Any Xcode package re-resolve silently reverts them in the build — this has *already happened three times* (see `patches/README.md`). The apply script is not wired into any build phase. → **V1 (vendor the packages)**.
 
-**Model economy rationale:** trivial mechanical edits → Composer 2.5 / Gemini 3.5 High flash / GPT 5.5 Low. Focused single-subsystem refactors → Sonnet 4.6 / GPT 5.5 Medium–High. Cross-cutting concurrency or AppKit/SwiftUI lifecycle architecture (expensive to get wrong) → Opus 4.8 / Fable 5. Analysis/report writing over large context → Gemini 3.1 pro.
+### F2. Tab switch rebuilds the whole editor *(the biggest remaining UX cost)*
+Switching tabs swaps SwiftUI identity of `EditorAreaFileView` → tears down and rebuilds `CodeFileView` → new `TextViewController`, full text layout, full Tree-sitter re-parse. `CodeFileView.body` is also `.id(ObjectIdentifier(codeFile))`-keyed. Async open (L1) removed the disk stall but the rebuild stall remains on every switch back to an open tab. → **V3 (editor view caching)**.
+
+### F3. "Slightly bigger file = janky animations" — remaining causes
+With L1–L8 landed, the remaining suspects for the user-visible complaint, in likely order:
+1. **Tree-sitter sync threshold semantics**: only `setUp` (full parse) needs the low 100 KB sync threshold; incremental edits and visible-range queries are cheap and currently share the same gate — files just over 100 KB get the async flash, files just under get sync cost on open. Split thresholds inside the (to-be-vendored) package. → **V4**.
+2. **Wrap-on live resize re-typeset**: every resize frame re-typesets all visible lines when Wrap Lines is on (the `frozenWrapWidth` optimization was correctly reverted for correctness — do **not** reintroduce it that way). FastID reduced per-line cost; an Instruments pass must say whether this is still a hang source. → **V6**.
+3. **`CodeFileView` observes ~20 `@AppSettings` keys** — any settings write re-evaluates every open editor body. → **V5**.
+
+### F4. New findings from this audit (not in the old plan)
+- **`flattenedFileItems`/`childrenMap` leak**: when a folder is deleted, only its *direct* children are pruned; descendants of deleted subfolders stay in both maps forever (stale objects, growing memory, and they used to be swept by the old git-status loop). → **V7**.
+- **Navigator filter cache staleness**: with an active navigator filter, `filteredContentChildren` caches filtered children and FS changes don't invalidate entries for collapsed dirs (pre-existing; reloads never reached collapsed rows anyway). Minor. → folded into **V7**.
+- **`MarkdownPreviewView.updateNSView`** still does an O(n) string compare against the text view per SwiftUI update (rare updates, but O(n) on a 2 MB doc). A document version counter removes it. → **V8**.
+- **Markdown full-document restyle on fence edits**: typing inside/around ``` fences restyles the whole doc; a cached fence-state line index would bound it. Only matters for very large `.md`. → **V8**.
+
+---
+
+## Part 3 — Delegation plan
+
+One task = one prompt = one model. Every task ends with: build passes (`xcodebuild build -project Dynamite.xcodeproj -scheme Dynamite`), SwiftLint clean on touched files, no new violations, and for behavior changes a test or a written manual-verification note. Always validate the running app with `./script/build_and_run.sh --verify` (never Finder//Applications copies).
+
+**Model economy:** mechanical/scripted edits → Composer / Gemini flash / GPT 5.5 Low. Focused single-subsystem work → Sonnet 4.6 / GPT 5.5 Medium–High (GPT 5.5 High is a strong default for package-internal TextKit/typesetter work and for test authoring). Cross-cutting AppKit/SwiftUI lifecycle architecture → Fable 5 / Opus 4.8 / GPT 5.5 xHigh. Long-context analysis & report writing → Gemini 3.1 pro.
 
 ### Dependency order
 
 ```
-T0.1 → T0.2 → T1.1 (verify ghost bug fixed before deeper work)
-T0.3 (instrumentation) before Phase 2 measurement claims
-T1.4 → T1.5 (async open before/alongside editor caching)
-T2.1 → T2.3 → T2.4 (event pipeline before UI batching before git batching)
-Everything else independent.
+V1 → V2 (tests live in the vendored package) → V4 (threshold change is package-internal)
+V0 (signposts) before V6 (Instruments pass) — V6 also wants V3 landed
+V3 independent of V1 (app-side only) — highest risk, schedule early
+V5, V7, V8 independent
+V9 (upstreaming) after V2
 ```
 
----
+### V0 — Performance signposts + big-repo stress fixture
+**Model:** GPT 5.5 (Medium) · **Size:** S
 
-### Phase 0 — Ground truth & build hygiene
+> Add lightweight performance instrumentation to the Dynamite macOS app (CodeEdit fork). (1) Create `CodeEdit/Utils/PerfSignposts.swift`: a thin `OSSignposter` wrapper (subsystem `app.dynamite.perf`) with static categories `fileOpen`, `tabSwitch`, `fsEvents`, `gitStatus`, `outlineReload`, `markdownStyle`. (2) Add interval signposts at: `CEWorkspaceFile.loadCodeFileAsync()` (annotate byte size), `Editor.openFile`, `CEWorkspaceFileManager.fileSystemEventReceived` (annotate event count and per-stage: parse / IO / reconcile), `SourceControlManager.refreshAllChangedFiles()`, the batched reload block in `ProjectNavigatorOutlineView.fileManagerUpdated` (annotate item count and reloaded-row count), `MarkdownTextView.applyIncrementalStyling` (annotate restyled range length vs document length). (3) Add `scripts/make-stress-fixture.sh` generating a throwaway repo: 10,000 files across 800 dirs, a git history with ~500 modified files, and a 2 MB markdown file. (4) No behavior changes. Acceptance: build + lint clean; `xcrun xctrace record --template 'Time Profiler' ...` shows the signposts; usage notes in `Dynamite Docs/reports/V0-instrumentation.md`.
 
-#### T0.1 — Verify the running build contains the editor patches
-**Model:** Composer 2.5 · **Effort:** trivial/agentic · **Files:** `scripts/apply-editor-perf-patch.sh`, DerivedData
+### V1 — Vendor CodeEditTextView & CodeEditSourceEditor as local packages
+**Model:** Sonnet 4.6 (medium) or GPT 5.5 (High) · **Size:** M · **The top structural-durability task.**
 
-**Prompt:**
-> In the Dynamite repo, verify that the editor performance patches are present in every package checkout the build can use, then produce a clean build. Steps: (1) Run `./scripts/apply-editor-perf-patch.sh` and capture its output — it patches both `.SourcePackages/checkouts/` and any `~/Library/Developer/Xcode/DerivedData/Dynamite-*/SourcePackages/checkouts/` copies, and skips already-patched checkouts. (2) For each checkout of CodeEditTextView found, verify `Sources/CodeEditTextView/Utils/ViewReuseQueue.swift` contains the comment "Always remove a retired view" and `Sources/CodeEditTextView/TextLine/FastID.swift` exists. (3) Build the Dynamite scheme (Debug) from a clean state. (4) Report which checkouts were unpatched before you started — that tells us whether the user's "word duplicates on wrapped lines" and "unclickable right edge in markdown" bugs were simply a stale/unpatched build. Acceptance: all checkouts patched, build succeeds, report written to `Dynamite Docs/reports/T0.1-patch-verification.md`.
+> In the Dynamite repo, convert two remote SPM dependencies into vendored local packages so our editor patches can never again be silently reverted by a package re-resolve (this has happened three times; see `patches/README.md`). (1) Verify patches are applied (`./scripts/apply-editor-perf-patch.sh` reports "already patched" everywhere), then copy `.SourcePackages/checkouts/CodeEditTextView` (0.12.1 + `codeedittextview-resize-perf.patch`) and `.SourcePackages/checkouts/CodeEditSourceEditor` (0.15.1 + both sourceeditor patches) into `LocalPackages/CodeEditTextView` and `LocalPackages/CodeEditSourceEditor`. Strip `.git`; add `VENDORED.md` to each (upstream version, commit, applied patches). (2) In `Dynamite.xcodeproj` replace the remote references with local package references; point CodeEditSourceEditor's `Package.swift` dependency on CodeEditTextView at the relative local path. Other deps stay remote. (3) Build clean from a wiped DerivedData; verify the compiled sources contain the marker comment "Always remove a retired view" (`ViewReuseQueue.swift`) and `maxSyncContentLength: Int = 100_000` (`TreeSitterClient.swift`). (4) Update `patches/README.md` (patches now baked into `LocalPackages/`; script retired for these two packages) and add one line to `CLAUDE.md`'s tech-stack section. Acceptance: clean build with no compiled checkout of these two packages; lint clean.
 
-#### T0.2 — Vendor CodeEditTextView & CodeEditSourceEditor as local packages
-**Model:** Sonnet 4.6 (medium reasoning) · **Files:** `Dynamite.xcodeproj`, new `LocalPackages/`, `patches/`, `scripts/`
+### V2 — Regression tests for the ghost-text / dead-right-edge / typesetter-hang fixes
+**Model:** GPT 5.5 (High) or Opus 4.8 · **Depends:** V1 · **Size:** M
 
-**Prompt:**
-> In the Dynamite repo (macOS Swift app, forked from CodeEdit), convert two remote SPM dependencies into vendored local packages so our patches can never be silently lost to a package-cache reset. (1) Copy the **already-patched** checkouts `.SourcePackages/checkouts/CodeEditTextView` (0.12.1 + `patches/codeedittextview-resize-perf.patch`) and `.SourcePackages/checkouts/CodeEditSourceEditor` (0.15.1 + both sourceeditor patches) into `LocalPackages/CodeEditTextView` and `LocalPackages/CodeEditSourceEditor`. Strip their `.git` dirs; add a `VENDORED.md` to each noting upstream version, commit, and applied patches. (2) In `Dynamite.xcodeproj`, replace the remote package references for these two packages with local package references to those paths. CodeEditSourceEditor's dependency on CodeEditTextView must resolve to the local copy — update its `Package.swift` dependency to a relative local path. Other deps (CodeEditLanguages, etc.) stay remote. (3) Verify `swift package describe` works in each local package and the app builds clean. (4) Update `patches/README.md`: patches are now baked into `LocalPackages/`, the apply script is retired for these two packages (keep it for reference). (5) Update `CLAUDE.md` Tech stack section with one line about `LocalPackages/`. Acceptance: clean build with NO checkout of CodeEditTextView/CodeEditSourceEditor in `.SourcePackages/checkouts` being compiled; ghost-text fix (`ViewReuseQueue` "Always remove a retired view") present in compiled sources; SwiftLint clean.
+> In the vendored `LocalPackages/CodeEditTextView` inside the Dynamite repo: our patches fix three upstream bugs — (a) retired line-fragment views resurfacing as ghost text on wrapped lines + blocking right-edge clicks (`ViewReuseQueue.enqueueView` now removes views from superview; `LineFragmentView` is layer-backed), (b) infinite typesetter loop when width ≤ 0 (`clusterBreakEnsuringProgress` + pop-guard), (c) minimap `updateContentViewHeight` zero-height guard. Write package unit tests proving each: after `enqueueView` the view has no superview; during a simulated re-wrap no two visible fragment views overlap and fragment ranges are disjoint; `Typesetter.layoutTextUntilLineBreak` terminates with maxWidth 0, 0.1, and 1.0 on multi-line content; minimap height constraint becomes non-zero once content lays out. Then audit the re-wrap path (`TextLayoutManager.layoutLines`, fragment positioning, `ViewReuseQueue` callers, `LineFragmentView.hitTest`) for any remaining way a stale fragment stays visible or hit-testable, and confirm the text view width tracks the clip view under wrapping (no dead strip). Fix only what you find, smallest diffs, comment why. Findings → `Dynamite Docs/reports/V2-ghost-audit.md`.
 
-#### T0.3 — Performance instrumentation: signposts + a big-repo stress fixture
-**Model:** GPT 5.5 (Medium) · **Files:** new `CodeEdit/Utils/PerfSignposts.swift`, `CodeEditTests`, `scripts/`
+### V3 — Cache editor views across tab switches
+**Model:** Fable 5 (high) or GPT 5.5 (xHigh) · **Size:** L · **Highest-risk task; keep the diff reviewable.**
 
-**Prompt:**
-> Add lightweight performance instrumentation to the Dynamite macOS app so regressions are measurable in Instruments. (1) Create `CodeEdit/Utils/PerfSignposts.swift` with a thin `OSSignposter` wrapper (subsystem `app.dynamite.perf`) exposing static categories: `fileOpen`, `tabSwitch`, `fsEvents`, `gitStatus`, `outlineReload`, `markdownStyle`. (2) Instrument these exact spots with interval signposts: `Editor.openFile(item:)` (Features/Editor/Models/Editor/Editor.swift), `CEWorkspaceFile.loadCodeFile()`, `CEWorkspaceFileManager.fileSystemEventReceived(events:)` (annotate event count), `SourceControlManager.refreshAllChangedFiles()`, `ProjectNavigatorOutlineView` `fileManagerUpdated` (annotate item count), and `MarkdownTextView.applyStyling()` (annotate document length). (3) Add `scripts/make-stress-fixture.sh` that generates a throwaway repo with 10,000 files across 800 dirs, a git history, and a 2MB markdown file, for manual profiling. (4) No behavior changes; signposts must be no-ops in release if `#if DEBUG` is the repo convention — match surrounding style. Acceptance: build + lint clean; `xcrun xctrace` can record the signposts; brief usage notes in `Dynamite Docs/reports/T0.3-instrumentation.md`.
+> Dynamite macOS app (Swift/SwiftUI/AppKit, CodeEdit fork): switching editor tabs swaps the SwiftUI identity of `EditorAreaFileView(editorInstance:codeFile:)` (and `CodeFileView.body` is keyed `.id(ObjectIdentifier(codeFile))`), so the whole `CodeFileView` → CodeEditSourceEditor `TextViewController` stack is rebuilt — full re-layout and full Tree-sitter re-parse per switch. Implement per-split editor view caching so switching back to an open tab reuses the live AppKit view: (1) a cache keyed by tab on the `Editor` (or new `EditorViewCache`), LRU cap ~10 per split, eviction tears down coordinators/highlight providers; (2) restructure `EditorAreaView`/`EditorAreaFileView` so the hosting view's identity is stable per split and the hosted editor view swaps; move per-tab state that must survive (`TreeSitterClient` in `CodeFileView`) into the cached object; (3) closing a tab releases its cached view and document (existing `Editor.closeTab` semantics — note it nils `file.fileDocument`); settings/theme changes must still propagate to cached non-frontmost editors; (4) file opening is now async (`CEWorkspaceFile.loadCodeFileAsync`) — the cache must tolerate `fileDocument == nil` → loading view → document arrival. Stay inside `Features/Editor`; no orchestration; product layer untouched. Acceptance: switching between two open large files < 50 ms (V0 `tabSwitch` signpost), no re-parse on switch, memory bounded with 30 tabs, `CodeEditTests`/`CodeEditUITests` pass, build + lint clean. Propose the design in a doc comment atop the cache type.
 
----
+### V4 — Split tree-sitter sync thresholds (package-internal)
+**Model:** Sonnet 4.6 (medium) · **Depends:** V1 · **Size:** S
 
-### Phase 1 — The four reported bugs
+> In vendored `LocalPackages/CodeEditSourceEditor`, `TreeSitterClient` gates *all* operations (initial `setUp` full parse, incremental edits, visible-range queries) behind one `maxSyncContentLength` (our patch lowered it 1 MB → 100 KB to stop main-thread stalls opening medium files; cost: brief unhighlighted flash on files > 100 KB). Only `setUp` is O(document); edits are incremental and queries are ≤ 4096 chars. Introduce separate constants: keep 100 KB (or lower) for `setUp`; restore ~1 MB for edits/queries so medium files keep synchronous (flash-free) highlighting while typing. Audit each call site of the constant to classify it. Update `LocalPackages/CodeEditSourceEditor/VENDORED.md`. Acceptance: opening a 150 KB file does not stall the main thread (V0 signposts); typing in it highlights without flashing; package tests pass; build + lint clean.
 
-#### T1.1 — Regression-test the wrapped-line ghost bug & unclickable right edge
-**Model:** Opus 4.8 (high reasoning) · **Depends on:** T0.2 · **Files:** `LocalPackages/CodeEditTextView`
+### V5 — Consolidate CodeFileView's ~20 @AppSettings observers
+**Model:** GPT 5.5 (Medium) · **Size:** S
 
-**Prompt:**
-> In the vendored `LocalPackages/CodeEditTextView` (patched fork of upstream 0.12.1) inside the Dynamite repo: the historical bug was that retired line-fragment views queued in `ViewReuseQueue` stayed in the view hierarchy and resurfaced, drawing duplicated "ghost" words on wrapped lines and blocking clicks near the right edge. Our patch removes retired views from their superview (`enqueueView(forKey:)`) and gives fragments their own backing layers (`LineFragmentView.configureLayer`). Your job: (1) Write unit tests in the package's test target proving: after `enqueueView`, the view has no superview; after `enqueueViews(notInSet:)` during a simulated re-wrap (width change on a wrapped multi-line document via `TextLayoutManager`), no two visible `LineFragmentView`s overlap in frame and every visible fragment's `lineFragment` range is disjoint. (2) Audit the full re-wrap path for any *other* place a stale fragment view could remain visible or hit-testable: `TextLayoutManager.layoutLines`, fragment view positioning, `ViewReuseQueue` callers, and `LineFragmentView.hitTest` (returns nil — confirm the text view itself, not fragments, owns hit-testing all the way to the scroll view's right edge when `wrapLines` is on; specifically verify the text view's frame width equals the clip view width under wrapping so there is no dead strip). (3) Fix anything you find, smallest possible diffs, comment why. Do not refactor unrelated code. Acceptance: new tests pass, existing package tests pass, Dynamite app builds; write findings to `Dynamite Docs/reports/T1.1-ghost-audit.md`.
+> In `CodeEdit/Features/Editor/Views/CodeFileView.swift` (Dynamite repo), ~20 individual `@AppSettings(\.textEditing.*)` / `@AppSettings(\.theme.*)` wrappers each subscribe per open editor; any settings write re-evaluates every editor body. Inspect the `AppSettings` wrapper (`Features/Settings`), then introduce one observed model exposing the needed sub-structs as `@Published` with `removeDuplicates()`, and refactor `CodeFileView` to consume it so its `SourceEditorConfiguration` rebuilds only when an actual input changed. Behavior identical: every editor setting still live-updates all open editors. Verify with `Self._printChanges()` during dev (remove before commit) that an unrelated settings write (e.g. terminal font) causes zero `CodeFileView` re-evaluations. Keep the diff to `CodeFileView` + the new model. Build + lint clean.
 
-#### T1.2 — Markdown WYSIWYG editor: kill the hardcoded 600pt width / dead click zone
-**Model:** Gemini 3.5 High flash · **Files:** `CodeEdit/Features/Editor/MarkdownEditor/MarkdownEditorView.swift`, `MarkdownTextView.swift`
+### V6 — Instruments verification pass (report only)
+**Model:** Gemini 3.1 pro · **Depends:** V0, ideally after V3 · **Size:** S
 
-**Prompt:**
-> In the Dynamite macOS app, `MarkdownEditorView.makeNSView` creates `MarkdownTextView(theme:initialText:width: 600)` as the document view of an `NSScrollView`. The hardcoded 600pt width leaves an unclickable dead region to the right of the text column. Fix: the text view must always fill the scroll view's content width. (1) In `makeNSView`, after setting `documentView`, set the text view frame to the clip view bounds width and ensure `autoresizingMask = [.width]` actually takes effect (set `scrollView.contentView.autoresizesSubviews = true` if needed, or observe `NSView.frameDidChangeNotification` on the clip view and update the text view frame width). (2) Keep `textContainer.widthTracksTextView = true` so wrapping follows. (3) If a centered readable column is desired later, that's a `textContainerInset` concern — do NOT implement it now; full-width is the goal. (4) Remove the now-meaningless `width` init parameter or default it from the scroll view. Test: open a `.md` file with Markdown Preview on, resize the window — clicking anywhere right of the text places the caret on that line, and text re-wraps to the new width. Match surrounding SwiftUI/AppKit style; SwiftLint clean.
+> Profile the Dynamite macOS app using the V0 stress fixture and `app.dynamite.perf` signposts. Record Time Profiler + Hangs for: 10 s window live-resize with a wrapped 500 KB file open (Wrap Lines ON — check `TextLayoutManager.layoutLines` re-typeset cost; the old `frozenWrapWidth` freeze was reverted for correctness, do not recommend reintroducing it as-was), sidebar expand/collapse storms, a 1,000-file touch-storm while idle (verify the new off-main FSEvents pipeline holds: main-thread time per batch should be < 10 ms), git refresh with 500 changed files (verify ≤ ~10 `git status` spawns per 5 s storm and that only changed rows reload), opening 500 KB / 5 MB files (verify loading view appears < 16 ms), tab switching among 10 tabs. For every main-thread hang > 100 ms, attribute the heaviest stack to a file in `CodeEdit/Features/...` and suggest a fix + model per this plan's economy rules. Output: `Dynamite Docs/reports/V6-instruments-findings.md`. No code changes.
 
-#### T1.3 — Markdown WYSIWYG editor: incremental restyling instead of whole-document passes
-**Model:** GPT 5.5 (High) · **Files:** `MarkdownTextView.swift`, `MarkdownSyntaxStyler.swift`, `MarkdownConcealLayoutDelegate.swift`
+### V7 — Fix the file-index leak on folder deletion (+ filter cache invalidation)
+**Model:** Sonnet 4.6 (medium) · **Size:** S
 
-**Prompt:**
-> In the Dynamite macOS app's live markdown editor (`CodeEdit/Features/Editor/MarkdownEditor/`, TextKit 1): `MarkdownTextView.applyStyling()` currently runs on every keystroke (`didChangeText`) and every caret-paragraph change (`setSelectedRanges`), doing `setAttributes` over the full document, a regex pass over every line (`MarkdownSyntaxStyler.applyStyles`), then `layoutManager.invalidateGlyphs(forCharacterRange: fullRange)`. This is O(document) per keystroke and the blunt glyph invalidation without paired layout invalidation risks stale/duplicated line rendering. Refactor to incremental: (1) Add `MarkdownSyntaxStyler.applyStyles(to:in range:revealedParagraph:)` that styles only a given character range, where the range is expanded to whole paragraphs; keep the existing full-document method for initial load/theme change/`replaceContents`. Fenced code blocks make line styling context-dependent — maintain a cached line-index → in-fence flag (recomputed lazily from the nearest fence above the edit; full rescan only when a line containing a fence marker (``` or ~~~) is itself edited). (2) On `didChangeText`, restyle only the edited paragraph range (from `NSTextStorage` edited range, extended to paragraph boundaries). On caret paragraph change, restyle only the previously-revealed paragraph and the newly-revealed paragraph (concealment toggling), not the document. (3) Replace `invalidateGlyphs(fullRange)` with `invalidateGlyphs` + `invalidateLayout(forCharacterRange:actualCharacterRange:)` on exactly the restyled ranges — both calls, paired, to prevent stale line fragments. (4) Keep `applyStyles`'s attribute semantics identical (the conceal delegate depends on `.markdownConceal`). Acceptance: typing in a 1MB markdown file shows no full-document signpost (`markdownStyle` signpost from T0.3 reports range length ≪ doc length); bold/heading/fence rendering identical before/after on the repo's own `Dynamite Docs/*.md` files; no ghost or mis-wrapped lines after rapid editing around line-wrap boundaries; build + lint clean.
+> In the Dynamite repo, `CEWorkspaceFileManager` (`Features/CEWorkspace/Models/`): when a directory is deleted, `reconcileChildren(of:withDirectoryContents:)` (also reachable via `rebuildFiles`) removes only the directory's *direct* child entries from `flattenedFileItems`/`childrenMap`; descendants of deleted subfolders are never pruned — stale `CEWorkspaceFile` objects and map entries accumulate for the lifetime of the workspace. Fix: when removing a child whose `childrenMap` entry exists (it was an indexed directory), recursively remove its entire indexed subtree from both maps. Add a unit test in `CodeEditTests/Utils/CEWorkspaceFileManager/` (create nested dirs, index them via `childrenOfFile`, delete the root of the subtree on disk, trigger a rebuild, assert the maps contain no descendant keys). Bonus, same change: `ProjectNavigatorViewController.filteredContentChildren` caches filtered children while a navigator filter is active and is not invalidated by FS changes — invalidate affected entries in `fileManagerUpdated` (controller already clears it wholesale in `handleFilterChange`; per-item removal is enough). Build + lint clean.
 
-#### T1.4 — Open files asynchronously (kill main-thread file IO on navigator click)
-**Model:** Opus 4.8 (medium reasoning) · **Files:** `Editor.swift`, `CEWorkspaceFile.swift`, `EditorAreaView.swift`, `CodeFileDocument`
+### V8 — Markdown editor: version-counter sync + fence-state cache
+**Model:** GPT 5.5 (High) · **Size:** M
 
-**Prompt:**
-> In the Dynamite macOS app (CodeEdit fork), clicking a file in the project navigator runs `Editor.openFile(item:)` → `CEWorkspaceFile.loadCodeFile()` → `CodeFileDocument(contentsOf:ofType:)` — a synchronous disk read + string decode on the main thread. Large files visibly freeze the UI; this is the biggest cause of "slow tabs". Make file opening async while preserving NSDocument semantics: (1) Add `CEWorkspaceFile.loadCodeFileAsync() async throws` that performs `CodeFileDocument(contentsOf:ofType:)` on a background task (NSDocument init with contentsOf is thread-safe for reading; registration with `CodeEditDocumentController.shared.addDocument` and the `fileDocument` assignment must hop back to `@MainActor`). (2) In `Editor.openFile(item:)`/`openTab`, set the tab immediately (the UI already shows `LoadingFileView` while `fileDocument == nil` and listens via `fileDocumentPublisher` — see `EditorAreaView.swift` lines 60–82), then kick the async load in a `Task`; on failure, surface the existing error path (`logger.error`) plus close-the-tab handling. (3) Guard against double-loads when a user clicks the same file twice quickly (in-flight task per `CEWorkspaceFile`). (4) Preserve `openOptions`/cursor-position behavior in `CodeFileView.init`. (5) Audit all `loadCodeFile()` call sites and migrate them. Acceptance: opening a 50MB file never blocks the main thread >16ms before the loading view appears (verify with the T0.3 `fileOpen` signpost); no regressions opening files via Open Quickly, history navigation, or drag-drop; `CodeEditTests` pass; build + lint clean.
+> In Dynamite's live markdown editor (`CodeEdit/Features/Editor/MarkdownEditor/`, TextKit 1): (1) `MarkdownPreviewView.updateNSView` detects external document changes with a full `documentText != textView.string` compare — O(n) per SwiftUI update on large docs. Replace with a version counter: bump on every mirrored edit (`Coordinator.handleEdit`) and on `replaceContents`, and have external-change detection subscribe to the document's content-change signal (`CodeFileDocument` posts via `contentCoordinator.textUpdatePublisher`; the markdown view's own mirror writes must be excluded via the existing `isSyncing` flag) instead of comparing strings. (2) `MarkdownTextView.didChangeText` falls back to *full-document* restyling whenever the edited paragraph contains a fence marker (``` or ~~~). Maintain a line-index → in-fence cache so a fence edit restyles only from the edited fence to the next fence boundary (or EOF), recomputed lazily. (3) Undo in markdown mode uses the NSTextView's own stack, separate from the raw editor's registered undo manager — document this divergence in a header comment and file it as a known issue; do not attempt to unify in this task. Acceptance: typing near fences in a 2 MB md file restyles ≪ document length (V0 `markdownStyle` signpost); external changes (git checkout while preview open) still propagate; toggling preview preserves content; build + lint clean.
 
-#### T1.5 — Cache editor views across tab switches (stop rebuilding the editor per switch)
-**Model:** Fable 5 (high reasoning) · **Depends on:** T1.4 · **Files:** `EditorAreaView.swift`, `EditorAreaFileView.swift`, `CodeFileView.swift`, `Features/Editor/Models/`
+### V9 — Upstream the package fixes
+**Model:** Gemini 3.1 pro · **Depends:** V2 · **Size:** S · **Deliverable: PR branches + writeups, no Dynamite code.**
 
-**Prompt:**
-> In the Dynamite macOS app (Swift/SwiftUI/AppKit, CodeEdit fork): switching editor tabs swaps the SwiftUI identity of `EditorAreaFileView(editorInstance:codeFile:)`, so the entire `CodeFileView` → CodeEditSourceEditor `TextViewController` stack is torn down and rebuilt — full text layout and full Tree-sitter re-parse on every tab switch. Xcode-class IDEs keep per-tab editor views alive. Design and implement editor view caching: (1) Introduce a per-`Editor`-group cache (e.g. on `EditorInstance` or a new `EditorViewCache`) keyed by tab, holding the live editor view/controller for open tabs, with an LRU cap (suggest 10 per split; make it a constant) and eviction that properly tears down coordinators/highlight providers. (2) Restructure `EditorAreaView`/`EditorAreaFileView` so tab switches reuse the cached AppKit view (likely via an `NSViewRepresentable`/`NSViewControllerRepresentable` host whose identity is stable per editor-split, swapping the hosted view) instead of recreating SwiftUI subtrees. SwiftUI `@State` in `CodeFileView` (two `TreeSitterClient`s — note one, `treeSitter`, is an unused duplicate; delete it) must move into the cached per-tab object so parsers survive switches. (3) Closing a tab releases its cached view and its `CodeFileDocument` per existing close semantics; settings/theme changes must still propagate to cached (including non-frontmost) editors — verify via the existing `@AppSettings` bindings or by applying on cache-restore. (4) Honor the repo invariant: no orchestration, product layer untouched; keep changes inside `Features/Editor`. This is the highest-risk change in the plan — propose the design in a short doc comment block at the top of the cache type, keep the diff reviewable, and do NOT bundle unrelated cleanups. Acceptance: switching between two already-open large files is <50ms (T0.3 `tabSwitch` signpost), no re-parse on switch (Tree-sitter signposts/logs), memory stays bounded with 30 tabs open (eviction works), all `CodeEditTests`/`CodeEditUITests` pass, build + lint clean.
-
-#### T1.6 — CodeFileView init hygiene (duplicate TreeSitterClient, hover-cursor churn)
-**Model:** Composer 2.5 · **Files:** `CodeFileView.swift`, `EditorAreaFileView.swift` · **Note:** skip the TreeSitterClient part if T1.5 already landed it.
-
-**Prompt:**
-> Two small fixes in the Dynamite macOS app, `CodeEdit/Features/Editor/Views/`: (1) `CodeFileView.swift` declares two `@State` Tree-sitter clients: `treeSitterClient` (used in `highlightProviders`) and `treeSitter` (never read). Delete the unused `treeSitter`. Both are allocated on every struct init because `@State` initial values are evaluated per-init — confirm `TreeSitterClient()` construction is cheap; if it does nontrivial setup, lazily create it on first use instead. (2) `EditorAreaFileView.swift` `body` has `.onHover { hover in DispatchQueue.main.async { NSCursor.iBeam.push() / NSCursor.pop() } }` — this churns the cursor stack on every hover transition and can desync push/pop. Replace with `.onContinuousHover`-free, non-async direct push/pop guarded so pop only runs if we pushed (track with a small `@State` bool), or remove entirely if the underlying NSTextView already sets the I-beam cursor (test: hover over an open code file — if the cursor is already an I-beam without our modifier, delete the modifier). Build + SwiftLint clean; no behavior change beyond cursor correctness.
+> Prepare upstream contributions from Dynamite's vendored editor packages. Sources: `patches/README.md` (root-cause analyses), `patches/*.patch`, V2's regression tests. Three self-contained series against `CodeEditApp/CodeEditTextView` 0.12.1 and `CodeEditApp/CodeEditSourceEditor`: (1) ViewReuseQueue retired-view removal + layer-backed `LineFragmentView` + V2 tests (ghost text on wrapped lines, unclickable right edge — reproduces on pristine upstream, macOS 26); (2) typesetter forward-progress fix (zero-width infinite loop / launch hang); (3) minimap `updateContentViewHeight` zero-height guard. Exclude Dynamite-specific choices (FastID, threshold values, capture-name aliases) — list as optional follow-ups. Each PR: symptom, root cause, fix, repro, tests. Output `Dynamite Docs/reports/V9-upstream-prs/`. Merged upstream = permanently smaller vendored diff.
 
 ---
 
-### Phase 2 — Big-project scalability (sidebar, animations, resizing under load)
+## Part 4 — Summary
 
-#### T2.1 — Move FSEvents processing off the main thread
-**Model:** Opus 4.8 (high reasoning) · **Files:** `CEWorkspaceFileManager+DirectoryEvents.swift`, `CEWorkspaceFileManager.swift`, `DirectoryEventStream.swift`
+| ID | Task | Model (effort) | Size | Why |
+|----|------|----------------|------|-----|
+| V0 | Signposts + stress fixture | GPT 5.5 (Med) | S | Measurement before claims |
+| V1 | Vendor editor packages | Sonnet 4.6 / GPT 5.5 (High) | M | Kill the recurring patch-revert failure mode |
+| V2 | Package regression tests + audit | GPT 5.5 (High) / Opus 4.8 | M | Lock in ghost/hang fixes |
+| V3 | Editor view caching | Fable 5 / GPT 5.5 (xHigh) | L | Biggest remaining UX stall |
+| V4 | Split tree-sitter thresholds | Sonnet 4.6 (med) | S | Flash-free medium files, no stalls |
+| V5 | @AppSettings consolidation | GPT 5.5 (Med) | S | Stop cross-editor invalidation |
+| V6 | Instruments pass | Gemini 3.1 pro | S | Verify L1–L8 + find what's left |
+| V7 | File-index leak fix | Sonnet 4.6 (med) | S | Memory + staleness in long sessions |
+| V8 | Markdown version counter + fence cache | GPT 5.5 (High) | M | Big-md robustness |
+| V9 | Upstream PRs | Gemini 3.1 pro | S | Shrink vendored diff |
 
-**Prompt:**
-> In the Dynamite macOS app (CodeEdit fork), `CEWorkspaceFileManager.fileSystemEventReceived(events:)` (`Features/CEWorkspace/Models/CEWorkspaceFileManager+DirectoryEvents.swift`) wraps ALL work in `DispatchQueue.main.async`: per-event `rebuildFiles(fromItem:)` does synchronous `FileManager.contentsOfDirectory`, child diffing, and sorting on the main thread. When a coding agent or build writes many files, these batches stall the UI (laggy sidebar/animations/resizing — our top complaint on big projects). Rework: (1) Process events on a dedicated serial background queue/actor: directory listing, diffing against `childrenMap`, and sort happen off-main; produce a compact change-set (created/removed/updated `CEWorkspaceFile` ids + parents). Then apply mutations to `flattenedFileItems`/`childrenMap` and call `notifyObservers` in a single main-thread hop per batch. Beware: `flattenedFileItems`/`childrenMap` are currently main-confined and read by the outline view data source synchronously — keep ALL mutation on the main thread; only the IO + diff computation moves off-main (compute candidate child URL lists in the background, then reconcile quickly on main). (2) Coalesce: if a new FSEvents batch arrives while one is being processed, merge paths and process once (latest wins). (3) Also fix `rebuildFiles` O(n²): build a `Set` of `directoryContentsUrlsRelativePaths` and a `Set` of existing child ids instead of `Array.contains` in loops. (4) Git-event handling (`handleGitEvents`) stays as-is here (T2.4 owns it) but must still be called after the batch. Use the T0.3 `fsEvents` signpost to annotate batch size and main-thread time. Acceptance: with the T0.3 stress fixture and `touch`-storms of 1,000 files, main-thread time per batch <10ms (signpost), navigator state stays correct (create/delete/rename reflected), `CodeEditTests` pass, build + lint clean.
-
-#### T2.2 — (Folded into T2.1 step 3 — no separate task.)
-
-#### T2.3 — Batch project-navigator updates; stop per-item reloadItem storms
-**Model:** Sonnet 4.6 (high reasoning) · **Depends on:** T2.1 · **Files:** `ProjectNavigatorOutlineView.swift`, `ProjectNavigatorViewController*.swift`
-
-**Prompt:**
-> In the Dynamite macOS app, `ProjectNavigatorOutlineView.swift`'s `fileManagerUpdated(updatedItems:)` calls `outlineView.reloadItem(item, reloadChildren: true)` in a loop — one reload per updated item, each rebuilding a whole subtree. After git-status refreshes (which can pass thousands of items in a big repo) this is the dominant sidebar stall. Fix: (1) Wrap updates in `outlineView.beginUpdates()/endUpdates()`. (2) Skip items that are not visible: if the item's parent chain isn't expanded (`outlineView.isItemExpanded`) or `outlineView.row(forItem:) == -1`, skip — collapsed folders get correct state on expand anyway because the data source reads live model state. (3) Deduplicate: if both a parent and its descendant are in `updatedItems`, reload only the topmost ancestor. (4) For *status-only* changes (file's `gitStatus` changed, structure unchanged), prefer `reloadData(forRowIndexes:columnIndexes:)` on the affected visible rows instead of `reloadItem(_:reloadChildren: true)` — add a parameter to `fileManagerUpdated`/`notifyObservers` distinguishing structural vs. status updates (`CEWorkspaceFileManager.notifyObservers` callers: FS events = structural, `SourceControlManager.refreshStatusInFileManager` = status-only). (5) Keep the existing first-responder/rename deferral and selection-restoration logic intact. Also: `iconColor` and `rowHeight` setting observers in `ProjectNavigatorViewController` call full `reloadData()` — acceptable for explicit settings changes, leave them, but add a guard so they don't fire when the value is unchanged (rowHeight already guards; mirror for iconColor — verify). Acceptance: with 2,000 changed-status files, `outlineReload` signpost (T0.3) shows one batched update touching only visible rows; expanding folders still shows correct git badges; rename-in-place still works; build + lint clean.
-
-#### T2.4 — Debounce, serialize, and scope git status refresh
-**Model:** Sonnet 4.6 (medium reasoning) · **Depends on:** T2.1 · **Files:** `CEWorkspaceFileManager+DirectoryEvents.swift` (`handleGitEvents`), `SourceControlManager+GitClient.swift`
-
-**Prompt:**
-> In the Dynamite macOS app: every FSEvents batch with any non-`.git` change calls `SourceControlManager.refreshAllChangedFiles()` (spawns `git status`), and `refreshStatusInFileManager()` then iterates the ENTIRE `fileManager.flattenedFileItems` dictionary to clear stale statuses, then notifies observers with every touched file. During agent/build write-storms this spawns overlapping `git status` processes and floods the UI. Fix in `Features/CEWorkspace/Models/CEWorkspaceFileManager+DirectoryEvents.swift` and `Features/SourceControl/SourceControlManager+GitClient.swift`: (1) Debounce `refreshAllChangedFiles` calls triggered by FS events to at most one per 500ms (trailing edge), and serialize: if a refresh is running, mark dirty and run once more when it finishes — never concurrently (use an actor or a flag on the existing `@MainActor`-ish flow, matching the file's concurrency style). (2) In `refreshStatusInFileManager`, replace the full `flattenedFileItems` sweep with a maintained index: keep a `Set<String>` of file keys that currently have non-nil `gitStatus` (update it where `gitStatus` is set); stale-clearing then touches only that set minus the new changed set. (3) Only include files whose status actually changed in the `notifyObservers(updatedItems:)` set (currently every changed file is included even if status is identical — the `if file.gitStatus != changedFile.anyStatus()` guard sets but still inserts; insert only on real change). (4) Mark these notifications as status-only per T2.3's API. Acceptance: a storm of 500 file writes over 5s produces ≤ ~10 `git status` spawns (`gitStatus` signpost), UI badges end correct, no refresh is lost (final state matches `git status` output), build + lint clean.
-
-#### T2.5 — Instruments pass: verify resize/animation fixes hold under the stress fixture
-**Model:** Gemini 3.1 pro · **Depends on:** T0.1–T0.3, ideally after T2.1/T2.3 · **Deliverable:** report only, no code
-
-**Prompt:**
-> You are profiling the Dynamite macOS app (CodeEdit fork). Context: `patches/README.md` documents past fixes for resize stutter (NSHostingController `sizingOptions = []`, find-panel hosting, terminal grid resize throttling, jump-bar/tab-bar animation fixes, FastID, async tree-sitter init with a 100KB sync threshold). Your job is to verify these hold and find what's left. Using the stress fixture from `scripts/make-stress-fixture.sh`: (1) Record Instruments traces (Time Profiler + the `app.dynamite.perf` signposts + Hangs instrument) for: window live-resize for 10s, sidebar expand/collapse repeatedly, divider drags with terminal pane open, opening a 500KB and a 5MB source file, tab switching among 10 tabs, and a 1,000-file touch-storm while idle in the editor. (2) For every main-thread hang >100ms, attribute the heaviest stack and map it to a file/feature in the repo (source layout: `CodeEdit/Features/...`; key suspects documented in `Dynamite Docs/PERF-DEVPLAN.md` Part 1). (3) Explicitly check the known-fixed paths for regression: `NSHostingView.minSize` in resize stacks, `TextLayoutManager.layoutLines` re-typeset storms, SwiftTerm `Buffer.resize`, synchronous tree-sitter parse >100KB. (4) Write `Dynamite Docs/reports/T2.5-instruments-findings.md`: table of hangs (duration, stack summary, owning file, suggested fix, suggested model per this plan's economy rules). Do not change code.
-
----
-
-### Phase 3 — Inherited cleanups & upstream hygiene
-
-#### T3.1 — Consolidate CodeFileView's ~20 @AppSettings observers
-**Model:** GPT 5.5 (Medium) · **Files:** `CodeFileView.swift`, `Features/Settings/`
-
-**Prompt:**
-> In the Dynamite macOS app, `CodeEdit/Features/Editor/Views/CodeFileView.swift` declares ~20 individual `@AppSettings(\.textEditing.*)` / `@AppSettings(\.theme.*)` property wrappers. Each is a separate publisher subscription per open editor; any settings write re-evaluates every editor body. Consolidate: (1) Inspect the `AppSettings` property wrapper implementation (`Features/Settings`) to see what it subscribes to. (2) Create one observed view-model (e.g. `EditorConfigModel`) that exposes the needed `textEditing` + `theme` sub-structs as `@Published` values driven by a single Settings subscription with `removeDuplicates()` on the relevant sub-structs, and refactor `CodeFileView` to consume it. The editor representable's `configuration` should be rebuilt only when one of its inputs actually changed. (3) Behavior must be identical: changing font, wrap, minimap, gutter, theme, etc. in Settings still live-updates all open editors. Keep the diff scoped to `CodeFileView` + the new model; do not migrate other views. Acceptance: toggling an unrelated setting (e.g. terminal setting) triggers zero `CodeFileView` body re-evaluations (verify with `Self._printChanges()` during dev, removed before commit); all editor settings still apply live; build + lint clean.
-
-#### T3.2 — Markdown editor: single source of truth for text storage
-**Model:** Sonnet 4.6 (medium reasoning) · **Depends on:** T1.2, T1.3 · **Files:** `MarkdownEditorView.swift`, `MarkdownTextView.swift`, `CodeFileDocument`
-
-**Prompt:**
-> In the Dynamite macOS app's live markdown editor (`CodeEdit/Features/Editor/MarkdownEditor/`): `MarkdownTextView` owns its own `NSTextStorage`, and every keystroke is mirrored synchronously into the `CodeFileDocument.content` storage via `onEdit`/`mirrorEdit` (and external changes flow back via `replaceContents` string comparison in `updateNSView` — an O(n) `string !=` compare per SwiftUI update). Evaluate and implement the cleaner architecture: have `MarkdownTextView` use the document's existing `NSTextStorage` (`codeFile.content`) directly as its storage (TextKit 1 allows attaching a layout manager to an existing storage — the raw source editor already shares it via `contentCoordinator`; check `CodeFileDocument` for how `content` is shared and whether attributes applied by our styler would leak into the raw editor view — if they would, keep dual storage but replace the O(n) sync: mirror via the existing edited-range callback both directions with a version counter instead of full-string comparison). Whichever path you take, document why in a header comment. Acceptance: typing latency unchanged or better (T0.3 `markdownStyle` signpost), toggling Markdown Preview (⇧⌘R) back and forth preserves content and undo stack sanely, autosave still works, external file changes still propagate, build + lint clean.
-
-#### T3.3 — Upstream the ViewReuseQueue / minimap / typesetter fixes
-**Model:** Gemini 3.1 pro · **Depends on:** T1.1 · **Deliverable:** PR branches + writeups, no Dynamite code changes
-
-**Prompt:**
-> Prepare upstream contributions from the Dynamite repo's vendored editor packages. Source material: `patches/codeedittextview-resize-perf.patch`, `patches/codeeditsourceeditor-highlight-startup-perf.patch`, `patches/README.md` (full root-cause analysis), and the tests added in `LocalPackages/CodeEditTextView` by task T1.1. Produce three self-contained patch series against upstream `CodeEditApp/CodeEditTextView` (0.12.1) and `CodeEditApp/CodeEditSourceEditor`: (1) ViewReuseQueue retired-view removal + per-fragment backing layers + the T1.1 regression tests (bug: ghost duplicated text on wrapped lines, unclickable right edge — reproduces on pristine upstream). (2) Typesetter forward-progress guarantee (`clusterBreakEnsuringProgress`) fixing the zero-width infinite loop hang. (3) Minimap `updateContentViewHeight` zero-height guard fix. Exclude Dynamite-specific choices (FastID, the 100KB threshold change, capture-name mappings) unless trivially separable — list them as "optional follow-ups". For each series write a PR description: symptom, root cause, fix, repro steps, test coverage. Output to `Dynamite Docs/reports/T3.3-upstream-prs/`. Getting these merged upstream shrinks our vendored diff permanently.
-
----
-
-## Part 3 — Summary table
-
-| ID | Task | Model (effort) | Size | Fixes |
-|----|------|----------------|------|-------|
-| T0.1 | Verify patches in build | Composer 2.5 | XS | Bugs 2+3 (likely stale build) |
-| T0.2 | Vendor editor packages | Sonnet 4.6 (med) | M | Patch durability |
-| T0.3 | Signposts + stress fixture | GPT 5.5 (Med) | S | Measurement |
-| T1.1 | Ghost-bug tests + audit | Opus 4.8 (high) | M | Bugs 2+3 root |
-| T1.2 | WYSIWYG width/dead zone | Gemini 3.5 High flash | XS | Bug 2 (preview mode) |
-| T1.3 | Incremental md restyle | GPT 5.5 (High) | M | Bug 3 (preview) + md perf |
-| T1.4 | Async file open | Opus 4.8 (med) | M | Bug 4 |
-| T1.5 | Editor view caching | Fable 5 (high) | L | Bug 4 |
-| T1.6 | Init hygiene, cursor | Composer 2.5 | XS | Bug 4 (minor) |
-| T2.1 | FSEvents off main + O(n²) | Opus 4.8 (high) | L | Bug 1 |
-| T2.3 | Batched outline updates | Sonnet 4.6 (high) | M | Bug 1 |
-| T2.4 | Git status debounce/scope | Sonnet 4.6 (med) | M | Bug 1 |
-| T2.5 | Instruments verification | Gemini 3.1 pro | S | Bug 1 verification |
-| T3.1 | @AppSettings consolidation | GPT 5.5 (Med) | S | Editor churn |
-| T3.2 | Md storage unification | Sonnet 4.6 (med) | M | Md robustness |
-| T3.3 | Upstream PRs | Gemini 3.1 pro | S | Vendored-diff debt |
-
-**Recommended execution order:** T0.1 → T0.2 → T1.1 (this alone may fully resolve bugs 2 & 3) → T0.3 → T1.4 → T2.1 → T2.3 → T2.4 → T1.5 → T1.2 → T1.3 → rest.
+**Recommended order:** V1 → V0 → V3 (start early, it's the long pole) → V2 → V4 → V5 → V7 → V8 → V6 → V9.

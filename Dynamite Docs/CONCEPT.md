@@ -1,6 +1,6 @@
 # Dynamite — Concept Paper
 
-**Status:** v3 · **Owner:** Max · **Last updated:** 2026-06-10
+**Status:** v3 · **Owner:** Max · **Last updated:** 2026-06-14
 
 > **Doc map** (read in this order): `CONCEPT.md` — why Dynamite exists and what it is · `MARKET.md` — evidence & landscape · `PRD.md` — what we build · `ROADMAP.md` — in what order · `ARCHITECTURE.md` — how it maps to the codebase · `DEVPLAN.md` — how we build it, including which AI model gets which task.
 
@@ -8,7 +8,7 @@
 
 ## One line
 
-Dynamite is the native macOS **product ownership cockpit**: the place where a product builder runs discovery, strategy, planning, and customer development — grounded in the product's actual repo — and where that living product knowledge compiles into the context that external AI agents (Claude, Codex, Cursor) read. Agents work *beside* Dynamite, never inside a cage; a fast, beautiful IDE is included as a bonus, not as the point.
+Dynamite is the native macOS **Product Studio**: the place where a product builder runs discovery, strategy, planning, and customer development — grounded in the product's actual repo — and where that living product knowledge compiles into the context that external AI agents (Claude, Codex, Cursor) read. Agents work *beside* Dynamite, never inside a cage; Ground Control provides a fast, native code/agent-review environment when needed, but the product studio is the point.
 
 ## North star
 
@@ -16,7 +16,7 @@ A founder or product owner should be able to think, decide, plan, and learn abou
 
 ## What Dynamite is — and pointedly is not
 
-**Is:** a product platform (think Product Lab, but repo-aware and 10× deeper) + a context engine for agents + a native IDE as a useful extra.
+**Is:** a product platform (think Product Lab, but repo-aware and 10× deeper) + a context engine for agents + Ground Control as a useful native support environment.
 
 **Is not:** an agent orchestrator. We do not nest, run, or manage coding agents, and we do not compete with Conductor or Intent. The industry may even be moving *away* from the IDE as the agent's home — fine by us; our center of gravity is the product layer, not the editor. At most, agents like Claude or Codex can appear inside Dynamite as **extensions** when that gives a nicer UI — optional, never required, never the product.
 
@@ -59,10 +59,10 @@ The Product Graph compiles into what agents actually read:
 - **Decision Replay** — pick any decision and replay its evidence chain: which interviews, which data, which alternatives. Onboarding a cofounder or investor becomes a 10-minute tour.
 - **Stakeholder Digest** — investor/team updates auto-drafted from the Loop Ledger and Pulse.
 
-### 5. IDE — the bonus (inherited, kept excellent and out of the way)
-A fast native editor (CodeEdit fork) for when you *want* to look at or touch the code: doc and code diffs that are a pleasure to read, quick open, search, git, terminal. Plus the option to use Claude/Codex inside via an extension surface for nicer UI. It earns occasional love; it carries zero strategic weight, and nothing in layers 1–4 depends on it being open.
+### 5. Ground Control — the supporting operational environment
+A fast native CodeEdit-powered environment for when you *want* to review or touch the code: doc and code diffs that are a pleasure to read, quick open, search, git, terminal, build/test state, and optional Claude/Codex extension surfaces for nicer supervision. It is deliberately separate from Product Studio so product work and code/agent review do not overload each other, and nothing in layers 1–4 depends on it being open.
 
-**The shell — one app, two views:** every window toggles between **Cockpit view** (default: Studio, maps, Pulse, Ask the Product — with read-only code peeks, so non-coders never leave it) and **IDE view** (classic editor with product-context toggles in the inspector). Like Cursor's Editor↔Agent switch, inverted — Cockpit is primary. One shared workspace and link index underneath; that's why it's one app, not two.
+**The shell — one app, two environments:** every window toggles between **Product Studio** (default: Home, docs, tasks, maps, Pulse, Ask the Product — with read-only code peeks, so non-coders never leave it) and **Ground Control** (classic CodeEdit layout plus product-context toggles in the inspector). Like VS Code activity-level separation, but product-first. One shared workspace and link index underneath; that's why it's one app, not two.
 
 ## A day in Dynamite
 
@@ -77,7 +77,7 @@ Plan → ground in reality → brief any agent → verify → learn → plan. No
 4. *Unclear target user* → ours is explicit: product builders and product owners — people doing product-oriented work, not just development.
 
 ## Business model (sketch)
-- **Free:** IDE + basic typed docs. The cockpit door is open.
+- **Free:** Ground Control + basic typed docs. The Product Studio door is open.
 - **Pro (~$15–25/mo):** full Product Studio, Repo Awareness, Context Engine, Truth & Learning layer. Priced against ChatPRD ($10–25) and Product Lab — but defensible because none of them can read a repo.
 - **Team (per-seat):** shared product brain, audit trail, digests. Switching cost compounds with every link in the graph.
 

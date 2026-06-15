@@ -45,9 +45,9 @@ Every task below is an **explicit prompt** plus a one-line statement of **which 
 **Give to: Fable 5** · Cross-check: **Opus 4.8** (fresh session, ask it to attack the design)
 > Act as chief architect of Dynamite (read `CLAUDE.md`, `Dynamite Docs/PRD.md` §M1, `ARCHITECTURE.md`). Write ADR-0001 deciding the Product Graph data model: (1) front-matter schema for all 22 artifact kinds (shared core fields: id, kind, status, created, updated; per-kind fields kept minimal); (2) the typed-link representation in front-matter (human-readable, git-merge-friendly) for edges implements/validates/contradicts/supersedes/derived-from, including links to code targets (file path + optional symbol + content-hash anchor for rename survival); (3) the rebuildable local index (store choice: SQLite vs flat cache; invalidation; rebuild-from-files guarantee); (4) folder layout under the project's `product/` directory. Constraints: plain `.md` always authoritative; index always disposable; a user editing files in any other editor must never corrupt the graph. Deliver: the ADR + a `schema.md` appendix with one complete example file per category (canvas kind, doc kind, evidence kind).
 
-### T1.2 — ADR-0006: App shell — one app, two views
+### T1.2 — ADR-0006: App shell — one app, two environments
 **Give to: Fable 5** · After: T0.1
-> Read `Dynamite Docs/ARCHITECTURE.md` §"App shell" and `notes/codeedit-internals.md`. Write ADR-0006 formalizing the one-app/two-views architecture: how a per-window view mode (Cockpit ↔ IDE, ⌘1/⌘2) integrates with the existing CodeEdit window controller; where Cockpit surfaces mount; the deep-link routing scheme (node → file/line, file → node context) including a URL-style internal route format; state restoration per project; and how both views share one `CEWorkspace` session and `LinkIndex`. Decide explicitly against: separate window stacks, separate processes, web views. Include a migration-free rollout plan (IDE view = current behavior, Cockpit added).
+> Read `Dynamite Docs/ARCHITECTURE.md` §"App environments" and `notes/codeedit-internals.md`. Write ADR-0006 formalizing the one-app/two-environments architecture: how a per-window view mode (Product Studio ↔ Ground Control, ⌘1/⌘2) integrates with the existing CodeEdit window controller; where Product Studio surfaces mount; the deep-link routing scheme (node → file/line, file → node context) including a URL-style internal route format; state restoration per project; and how both environments share one `CEWorkspace` session and `LinkIndex`. Decide explicitly against: separate window stacks, separate processes, web views. Include a migration-free rollout plan.
 
 ### T1.3 — LinkIndex implementation ⚠
 **Give to: Sonnet 4.8** · Cross-check: **Gemini 3.1 Pro** reviews the diff · After: T1.1
@@ -55,7 +55,7 @@ Every task below is an **explicit prompt** plus a one-line statement of **which 
 
 ### T1.4 — Shell: view switcher + routing
 **Give to: Sonnet 4.8**; visual polish by **Composer 2.5** · After: T1.2
-> Implement `Features/Shell` per ADR-0006: per-window Cockpit/IDE mode with ⌘1/⌘2 switcher and toolbar control, mode persistence per project, the internal route format, and cross-deep-link handling (route from a graph node citation to IDE view at file/line; from a file to its product context). Cockpit view starts as an empty registered surface container that Studio features will fill (T1.6+). IDE view must remain pixel-identical to current behavior.
+> Implement `Features/Shell` per ADR-0006: per-window Product Studio/Ground Control mode with environment-owned navigation plus ⌘1/⌘2 commands, mode persistence per project, the internal route format, and cross-deep-link handling (route from a graph node citation to Ground Control at file/line; from a file to its product context). Product Studio is the default environment and owns its own sidebar/layout; Ground Control remains the CodeEdit-backed operational environment. Do not place a segmented environment toggle in the toolbar.
 
 ### T1.5 — Artifact templates (22 kinds)
 **Give to: Gemini 3.5 Flash High**; Max reviews for taste · After: T1.1
@@ -63,7 +63,7 @@ Every task below is an **explicit prompt** plus a one-line statement of **which 
 
 ### T1.6 — Typed-doc editor + template flow
 **Give to: Sonnet 4.8** · After: T1.3, T1.5
-> Implement the core of `Features/ProductGraph`: "New artifact" flow (kind picker → templated `.md` created in the right folder), a fast native Markdown editing surface for artifact docs (reuse the existing editor component), front-matter rendered as a friendly header form (status, kind, dates, links) instead of raw YAML, and kind/status badges in the file tree and quick-open. Editing must work in Cockpit view without any IDE panes.
+> Implement the core of `Features/ProductGraph`: "New artifact" flow (kind picker → templated `.md` created in the right folder), a fast native Markdown editing surface for artifact docs (reuse the existing editor component), front-matter rendered as a friendly header form (status, kind, dates, links) instead of raw YAML, and kind/status badges in the file tree and quick-open. Editing must work in Product Studio without any Ground Control panes.
 
 ### T1.7 — Native board/canvas views
 **Give to: Composer 2.5** (iterate live); data binding reviewed by **Sonnet 4.8** · After: T1.6
@@ -103,11 +103,11 @@ Every task below is an **explicit prompt** plus a one-line statement of **which 
 
 ### T2.4 — X-Ray summarization design
 **Give to: Opus 4.8** (prompt/pipeline design); then **Sonnet 4.8** implements · After: T2.2
-> Design the Repo X-Ray summarization pipeline: how structural index data + AIAssist calls produce a plain-language, citation-backed map of what the product does — feature/flow detection heuristics, per-module summaries written for a non-programmer (8th-grade reading level, no jargon), confidence labels (derived-from-code vs inferred), caching and incremental re-summarization on change, and token budgets per repo size. Deliver `notes/xray-pipeline.md` with the exact prompt templates. (Then Sonnet: implement the pipeline and the X-Ray browsing UI in Cockpit view — feature list → flows → modules → drill to cited code peek — per that note.)
+> Design the Repo X-Ray summarization pipeline: how structural index data + AIAssist calls produce a plain-language, citation-backed map of what the product does — feature/flow detection heuristics, per-module summaries written for a non-programmer (8th-grade reading level, no jargon), confidence labels (derived-from-code vs inferred), caching and incremental re-summarization on change, and token budgets per repo size. Deliver `notes/xray-pipeline.md` with the exact prompt templates. (Then Sonnet: implement the pipeline and the X-Ray browsing UI in Product Studio — feature list → flows → modules → drill to cited code peek — per that note.)
 
 ### T2.5 — Ask the Product ⚠
 **Give to: Sonnet 4.8**; retrieval design by **Fable 5**; answer-quality review by **Opus 4.8** · After: T2.2, T2.4
-> (Fable 5, first:) design the grounded-QA retrieval: how a natural-language question selects graph nodes + index entries + X-Ray summaries as context, and the answer contract — every sentence cited or labeled as uncertain, "I don't know" preferred over guessing; write `notes/ask-the-product.md`. (Sonnet:) implement the Ask the Product panel in Cockpit view per that note: question box, streaming answer with citation chips (click → code peek or node), history per project. Hard rule from CLAUDE.md: grounded or silent.
+> (Fable 5, first:) design the grounded-QA retrieval: how a natural-language question selects graph nodes + index entries + X-Ray summaries as context, and the answer contract — every sentence cited or labeled as uncertain, "I don't know" preferred over guessing; write `notes/ask-the-product.md`. (Sonnet:) implement the Ask the Product panel in Product Studio per that note: question box, streaming answer with citation chips (click → code peek or node), history per project. Hard rule from CLAUDE.md: grounded or silent.
 
 ### T2.6 — ADR-0003 + Context Compiler ⚠⚠
 **Give to: Fable 5** (ADR) then **Sonnet 4.8** (implementation) · Cross-check: **Gemini 3.1 Pro** line-by-line on the merge engine ·
@@ -192,6 +192,6 @@ Every task below is an **explicit prompt** plus a one-line statement of **which 
 ---
 
 ## Milestone acceptance (run after each phase)
-- **Phase 1:** a founder completes persona → VPC → assumptions → PRD fully linked and AI-drafted, in Cockpit view only, with no repo connected. Faster and nicer than Product Lab/ChatPRD.
+- **Phase 1:** a founder completes persona → VPC → assumptions → PRD fully linked and AI-drafted, in Product Studio only, with no repo connected. Faster and nicer than Product Lab/ChatPRD.
 - **Phase 2:** a non-coder answers "do we support refunds, and where?" with citations; a Claude Code session run from a plain terminal visibly improves with Dynamite-compiled context; Context Lens explains why.
 - **Phase 3:** a decision traces from customer quote to shipped commit; the weekly digest drafts itself; drift never silently accumulates.

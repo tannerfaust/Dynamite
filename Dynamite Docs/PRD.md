@@ -1,15 +1,15 @@
 # Dynamite — Product Requirements Document (PRD)
 
-**Status:** Draft v3 · **Owner:** Max · **Last updated:** 2026-06-10
+**Status:** Draft v3 · **Owner:** Max · **Last updated:** 2026-06-14
 **Supersedes:** v2. Concept in `CONCEPT.md`; evidence in `MARKET.md`; sequencing in `ROADMAP.md`; codebase mapping in `ARCHITECTURE.md`; build plan in `DEVPLAN.md`.
 
 ---
 
 ## 1. Summary
 
-Dynamite is a native macOS **product ownership cockpit**: a product platform (typed discovery/strategy/planning artifacts — the **Product Graph**) that is grounded in the product's actual repo (**Repo Awareness**) and compiles into the context files external AI agents read (**Context Engine**: `AGENTS.md` canonical + `CLAUDE.md` shim + briefing packs). Agents like Claude Code and Codex work *beside* Dynamite — in terminals, clouds, or optionally inside via an extension surface — never nested or orchestrated by it. A fast native IDE (CodeEdit fork) is included as a bonus capability, strategically demoted: nothing in the product layer depends on it.
+Dynamite is a native macOS **Product Studio**: a product platform (typed discovery/strategy/planning artifacts — the **Product Graph**) that is grounded in the product's actual repo (**Repo Awareness**) and compiles into the context files external AI agents read (**Context Engine**: `AGENTS.md` canonical + `CLAUDE.md` shim + briefing packs). Agents like Claude Code and Codex work *beside* Dynamite — in terminals, clouds, or optionally inside via an extension surface — never nested or orchestrated by it. Ground Control, the CodeEdit-powered code/agent-review environment, is included as a supporting capability: nothing in the product layer depends on it.
 
-v3 direction change: the product layer *is* Phase 1 (was the Review Cockpit); agent orchestration is out of scope permanently; Repo Awareness (X-Ray, Ask the Product, Reality Diff) added as the differentiator; IDE demoted to a supporting layer.
+v3 direction change: the product layer *is* Phase 1 (was the Review Cockpit); agent orchestration is out of scope permanently; Repo Awareness (X-Ray, Ask the Product, Reality Diff) added as the differentiator; Ground Control demoted to a supporting layer.
 
 ## 2. Problem
 
@@ -23,7 +23,7 @@ Product builders and product owners do product work — discovery, customer deve
 - **G3 — Context Engine:** compile the graph into `AGENTS.md`/`CLAUDE.md`/per-folder context and right-sized briefing packs; inspectable (Context Lens); drift-checked.
 - **G4 — Truth & learning:** assumptions tracked against evidence; every loop (feedback → decision → spec → shipped change) traceable.
 - **G5 — Agent-agnostic by construction:** all output is plain files in the repo; works identically with any agent, anywhere. Optional in-app agent UI only as an extension.
-- **G6 — IDE as bonus:** fast, native, excellent, out of the way.
+- **G6 — Ground Control as support:** fast, native, excellent, out of the way.
 
 ### Non-goals (permanent unless revisited post-PMF)
 - Agent orchestration: no nesting, running, scheduling, or managing coding agents; no multi-agent panes; no worktree management. (Conductor/Intent's fight, not ours.)
@@ -47,12 +47,12 @@ Product builders and product owners do product work — discovery, customer deve
 
 ## 6. Requirements by module
 
-### M0 — App shell: one app, two views *(Phase 1, with M1)*
-- **R0.1 Cockpit view (default).** The product ownership surface: Studio, maps/canvases, Pulse, Ask the Product, ledgers. Includes read-only code peeks (citation popovers, X-Ray drill-down) so a non-coder never needs the IDE view.
-- **R0.2 IDE view.** Classic CodeEdit layout with **product toggles**: inspector panels showing the current file's graph context (spec, decisions, assumptions) and quick actions (open in Cockpit, add link).
-- **R0.3 Switcher.** Per-window toggle (⌘1/⌘2), mode remembered per project; two windows can show both views of one workspace. Cross-deep-links both ways (citation → file/line; file → product context).
+### M0 — App shell: one app, two environments *(Phase 1, with M1)*
+- **R0.1 Product Studio (default).** The product ownership environment: Home, typed docs, tasks, projects, roadmap, maps/canvases, Pulse, Ask the Product, ledgers. Includes read-only code peeks (citation popovers, X-Ray drill-down) so a non-coder never needs Ground Control.
+- **R0.2 Ground Control.** Classic CodeEdit layout with code review, diffs, source control, terminal, build/test state, optional agent-extension supervision, and **product toggles**: inspector panels showing the current file's graph context (spec, decisions, assumptions) and quick actions (open in Product Studio, add link).
+- **R0.3 Switcher.** Per-window environment switch through native navigation plus shortcuts: Product Studio sidebar → Ground Control, Ground Control navigator → Product Studio, ⌘1/⌘2 menu commands; no toolbar segmented control. Mode is remembered per project; two windows can show both environments of one workspace. Cross-deep-links both ways (citation → file/line; file → product context).
 - **Rationale:** not two subapps — one shared workspace and LinkIndex; two apps would sever the graph and double maintenance. See `ARCHITECTURE.md` (ADR-0006).
-- **Acceptance:** a PO lives entirely in Cockpit view; an engineer lives in IDE view with product context one toggle away; both see the same truth.
+- **Acceptance:** a PO lives entirely in Product Studio; an engineer or agent reviewer lives in Ground Control with product context one toggle away; both see the same truth.
 
 ### M1 — Product Studio *(Phase 1 — ship first)*
 - **R1.1 Typed documents — the full product-ownership catalog** (each a templated kind, plain `.md` + front-matter on disk):
@@ -87,16 +87,16 @@ Product builders and product owners do product work — discovery, customer deve
 - **R4.1 Assumption Ledger.** BMC/VPC hypotheses tracked (untested/validating/validated/falsified) with linked evidence; falsification flags downstream specs.
 - **R4.2 Interview Mode.** Paste/import a customer conversation → insights extracted (agent-assisted), linked to personas/assumptions; contradictions flagged.
 - **R4.3 Loop Ledger.** Auto-trace: feedback → insight → decision → spec → shipped change (via repo history).
-- **R4.4 Pulse.** Daily cockpit screen: assumption status, drift, loop velocity, repo changes narrated in product language.
+- **R4.4 Pulse.** Daily Product Studio screen: assumption status, drift, loop velocity, repo changes narrated in product language.
 - **R4.5 Decision Replay.** Any decision replayable with its full evidence chain.
 - **R4.6 Stakeholder Digest.** Investor/team update drafted from Pulse + Loop Ledger.
 - **Acceptance:** a product decision traces from customer quote to shipped code; the weekly update writes itself.
 
-### M5 — IDE & extension surface *(supporting layer, inherited)*
-- **R5.1 Editor excellence, maintained not expanded:** fast editor, file tree, search, git, terminal (CodeEdit inheritance).
+### M5 — Ground Control & extension surface *(supporting layer, inherited)*
+- **R5.1 Ground Control excellence, maintained not expanded:** fast editor, file tree, search, git, terminal, diffs, build/test affordances (CodeEdit inheritance).
 - **R5.2 Doc review parity.** Diffing a PRD/spec revision as polished as a code diff.
 - **R5.3 Agent extension surface (optional).** Claude/Codex usable inside Dynamite via an extension for nicer UI (chat panel, inline results). Strictly optional; no orchestration features (no parallel sessions, worktrees, fleet management).
-- **Acceptance:** the IDE never blocks or slows the product layer; a user who never opens it loses nothing from M1–M4.
+- **Acceptance:** Ground Control never blocks or slows the product layer; a user who never opens it loses nothing from M1–M4.
 
 ### M6 — Team & scale *(Phase 4 — monetization)*
 - **R6.1 Shared product brain** (synced graph/context) — paid wedge.
@@ -111,7 +111,7 @@ Product builders and product owners do product work — discovery, customer deve
 - **North star:** weekly closed loops (evidence → decision → spec → shipped change) per active user.
 
 ## 8. Risks & mitigations
-- **Two mediocre halves** → graph + repo awareness + compiler get excellence first; IDE stays inherited.
+- **Two mediocre halves** → graph + repo awareness + compiler get excellence first; Ground Control stays inherited.
 - **ChatPRD/Product Lab add MCP repo-reading** → our grounding is native, linked, drift-checked — not a fetch; ship X-Ray early.
 - **Repo analysis quality for non-coders** (X-Ray wrong = trust gone) → citations everywhere, confidence labels, never assert without a source.
 - **Scope gravity toward orchestration** ("just add agent panes") → non-goal is written in stone above; extension surface is the release valve.

@@ -7,7 +7,7 @@ Audit of Phase-1 code against the architectural invariant (ARCHITECTURE.md):
 > workspace/document model, never on editor UI. No orchestration subsystem exists anywhere.
 
 Scope traced: `Features/ProductGraph`, `Features/LinkIndex`, `Features/AIAssist`,
-`Features/Shell` (Cockpit surfaces). Method: import graph + grep for editor/git/runtime
+`Features/Shell` (Product Studio surfaces). Method: import graph + grep for editor/git/runtime
 symbols (`EditorManager`, `CodeFileDocument`, `SourceControlManager`, `GitClient`,
 `@EnvironmentObject`, `WorkspaceDocument`), then manual trace of each hit.
 
@@ -15,19 +15,19 @@ symbols (`EditorManager`, `CodeFileDocument`, `SourceControlManager`, `GitClient
 
 ### Violations found — fixed in this change
 - [x] **V1 (crash)** `ProductGraph/Map/Views/ProductMapView.swift:16` declared
-  `@EnvironmentObject var workspace: WorkspaceDocument`, but the Cockpit hosting controller
-  (`ShellViewController.buildCockpitChildIfNeeded`) never injects it → fatal error on first
+  `@EnvironmentObject var workspace: WorkspaceDocument`, but the Studio hosting controller
+  (`ShellViewController.buildStudioChildIfNeeded`) never injects it → fatal error on first
   node tap. **Fix:** removed the environment dependency; `Router` is now passed weakly through
   `MapSurface` → `ProductMapViewModel.openNode(id:)`. Map works with nil router (selection only).
 - [x] **V2 (dead-end routes)** `Shell/Router.swift:131,136` wrote `cockpitSelectedNode` /
   `cockpitSelectedSurface` workspace state that **no view consumed** — Backlinks rows and map
   taps switched mode but never focused anything. **Fix:** Router now also posts
-  `.cockpitFocusNode` / `.cockpitFocusSurface`; `CockpitRootView` selects the surface,
+  `.cockpitFocusNode` / `.cockpitFocusSurface`; Product Studio selects the surface,
   `StudioViewModel` selects the artifact (with a pending-id retry if the store is still loading).
 - [x] **V3 (silent degradation)** `ProductGraph/Views/StudioSurface.swift` never passed
   `linkIndexManager` into `StudioViewModel` (defaulted nil) → AIAssist `ContextBundleBuilder`
   always degraded to focus-artifact-only. **Fix:** wired through
-  `ShellViewController.registerCockpitSurfaces()` → `StudioSurface` → `StudioRootView`.
+  `ShellViewController` → `ProductStudioRootView`.
 - [x] **V4 (watcher gap)** `LinkIndex/LinkIndexManager.swift:25-29` attached the `product/`
   `DirectoryEventStream` only if the folder existed at init. Fresh standalone workspace →
   first artifacts never indexed until relaunch. **Fix:** `ArtifactStore` posts
@@ -44,8 +44,8 @@ symbols (`EditorManager`, `CodeFileDocument`, `SourceControlManager`, `GitClient
 - [x] `AIAssist`: imports are Foundation/SwiftUI/Combine/GRDB/Security only. "editor" hits are
   doc comments/prompt prose. `ContextBundleBuilder(linkIndex: nil, …)` degrades gracefully.
 - [x] `LinkIndex`: depends on workspace URL + GRDB only; no repo or editor coupling.
-- [x] Shell-Cockpit: `registerCockpitSurfaces()` guards on `workspace?.fileURL`; with no
-  workspace the Cockpit shows the empty placeholder. No orchestration subsystem anywhere.
+- [x] Product Studio shell: Studio stores guard on `workspace?.fileURL`; with no
+  workspace the Studio degrades gracefully. No orchestration subsystem anywhere.
 - [x] `Router.openFile` (Shell:186) touches `editorManager` — **allowed**: Shell is the
   bridge layer routing *into* the IDE; product surfaces never call it directly.
 - [x] ProductGraph → `Features/Editor/MarkdownEditor/MarkdownTextView` — **allowed by design**
