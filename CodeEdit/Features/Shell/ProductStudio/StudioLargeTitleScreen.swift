@@ -62,11 +62,15 @@ private extension View {
     /// legibility-preserving fade where scrolling content meets the top bar — no hand-built blur.
     @ViewBuilder
     func studioTopScrollEdgeEffect() -> some View {
+        #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             self.scrollEdgeEffectStyle(.soft, for: .top)
         } else {
             self
         }
+        #else
+        self
+        #endif
     }
 
     /// Pins the navigation chrome to the top. On macOS 26 it uses `safeAreaBar`, which marks the
@@ -74,10 +78,14 @@ private extension View {
     /// reserves space and does not drive the effect). Falls back to `safeAreaInset` on older systems.
     @ViewBuilder
     func studioTopBar<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        #if compiler(>=6.2)
         if #available(macOS 26.0, *) {
             self.safeAreaBar(edge: .top, spacing: 0, content: content)
         } else {
             self.safeAreaInset(edge: .top, spacing: 0, content: content)
         }
+        #else
+        self.safeAreaInset(edge: .top, spacing: 0, content: content)
+        #endif
     }
 }
